@@ -313,6 +313,7 @@ label.sub{ font-weight:700; }
 .erow-top input{ flex:1; min-width:0; font-weight:700; }
 .erow-top .ex-thumb{ width:58px; height:44px; }
 .erow-top .noimg svg{ width:20px; height:20px; }
+.fx-act{ position:sticky; bottom:calc(-28px - env(safe-area-inset-bottom, 0px)); z-index:2; margin-bottom:calc(-28px - env(safe-area-inset-bottom, 0px)); padding:14px 0 calc(16px + env(safe-area-inset-bottom, 0px)); background:linear-gradient(transparent, var(--bg) 14px); }
 .h-link{ background:none; border:0; padding:0; text-align:left; font:inherit; font-weight:700; font-size:15px; color:inherit; text-decoration:underline dotted var(--muted); text-underline-offset:4px; }
 @media (max-width:440px){ .fx-muscles{ grid-template-columns:1fr; } }
 @media (prefers-reduced-motion: reduce){ .toast, .rest-fill, .status .bar i{ transition:none; } .restbar.done .rest-count{ animation:none; }
@@ -936,7 +937,7 @@ function viewFicha(){
   } else histBox = '<p class="small muted">Aún no lo ha hecho.</p>';
   let add = '';
   if (S.pick && e) add = pickIds().indexOf(id) >= 0 ? '<p class="small muted center">Ya está en la sesión.</p>'
-    : '<button class="btn-primary" data-act="fx-add" data-v="' + esc(id) + '">' + (S.pick.ctx === 'swap' ? 'Cambiar por este' : 'Añadir') + '</button>';
+    : '<div class="fx-act"><button class="btn-primary" data-act="fx-add" data-v="' + esc(id) + '">' + (S.pick.ctx === 'swap' ? 'Cambiar por este' : 'Añadir') + '</button></div>';
   return '<div class="sheet fx" data-sheet="fx" role="dialog" aria-modal="true" aria-labelledby="fx-title"><div class="sheet-in">' +
     '<div class="sheet-head"><button class="btn-text" data-act="sheet-close">← Volver</button></div>' +
     media + '<h2 id="fx-title" class="fx-name">' + esc(name) + '</h2>' + muscles + tips +
