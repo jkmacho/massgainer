@@ -19,6 +19,7 @@
   --accent:#2647B5; --accent-soft:rgba(38,71,181,.10); --on-accent:#FFFFFF;
   --done:#1B8A57; --done-soft:rgba(27,138,87,.12); --on-done:#FFFFFF;
   --gold:#8A6400; --gold-soft:rgba(232,180,0,.22); --danger:#C0352B;
+  --mus:#C3CCDA; --mus-n:#DEE3EB;
   --display:'Barlow Condensed', 'Arial Narrow', 'Roboto Condensed', system-ui, sans-serif;
   --body:'Atkinson Hyperlegible', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --nav-h:62px; --rest-h:76px; --r:14px;
@@ -30,6 +31,7 @@
     --accent:#88A3FF; --accent-soft:rgba(136,163,255,.15); --on-accent:#0B1020;
     --done:#45CF8C; --done-soft:rgba(69,207,140,.15); --on-done:#06140C;
     --gold:#F2C94C; --gold-soft:rgba(242,201,76,.18); --danger:#FF7A6E;
+    --mus:#363E4C; --mus-n:#252A34;
     color-scheme:dark;
   }
 }
@@ -38,6 +40,7 @@
   --accent:#88A3FF; --accent-soft:rgba(136,163,255,.15); --on-accent:#0B1020;
   --done:#45CF8C; --done-soft:rgba(69,207,140,.15); --on-done:#06140C;
   --gold:#F2C94C; --gold-soft:rgba(242,201,76,.18); --danger:#FF7A6E;
+  --mus:#363E4C; --mus-n:#252A34;
   color-scheme:dark;
 }
 *,*::before,*::after{ box-sizing:border-box; }
@@ -97,9 +100,6 @@ h1{ font-family:var(--display); font-weight:700; font-size:38px; line-height:1; 
 .sessions.three{ grid-template-columns:repeat(3, minmax(0, 1fr)); gap:8px; }
 .sessions.three .sess{ flex-direction:column; align-items:flex-start; gap:4px; padding:10px; }
 .sessions.three .sess-k{ width:auto; font-size:30px; }
-.cat-group{ display:flex; flex-direction:column; gap:6px; }
-.cat-items{ display:flex; flex-wrap:wrap; gap:6px; }
-.cat-items .pill{ text-align:left; }
 .sess-k{ font-family:var(--display); font-weight:700; font-size:34px; line-height:1; color:var(--accent); width:24px; text-align:center; }
 .sess-t{ display:flex; flex-direction:column; min-width:0; }
 .sess-t b{ font-size:14.5px; line-height:1.25; }
@@ -236,10 +236,63 @@ h1{ font-family:var(--display); font-weight:700; font-size:38px; line-height:1; 
 .nav button[aria-current="page"]{ color:var(--accent); font-weight:700; }
 .nav button[aria-current="page"] svg{ stroke-width:2.4; }
 
-.toast{ position:fixed; left:50%; bottom:calc(var(--nav-h) + 16px + env(safe-area-inset-bottom, 0px)); transform:translate(-50%, 12px); z-index:30; background:var(--text); color:var(--bg); padding:10px 16px; border-radius:12px; font-size:15px; max-width:calc(100% - 32px); opacity:0; pointer-events:none; transition:opacity .2s, transform .2s; }
+.toast{ position:fixed; left:50%; bottom:calc(var(--nav-h) + 16px + env(safe-area-inset-bottom, 0px)); transform:translate(-50%, 12px); z-index:50; background:var(--text); color:var(--bg); padding:10px 16px; border-radius:12px; font-size:15px; max-width:calc(100% - 32px); opacity:0; pointer-events:none; transition:opacity .2s, transform .2s; }
 body.resting .toast{ bottom:calc(var(--nav-h) + var(--rest-h) + 16px + env(safe-area-inset-bottom, 0px)); }
 .toast.show{ opacity:1; transform:translate(-50%, 0); }
-@media (prefers-reduced-motion: reduce){ .toast, .rest-fill, .status .bar i{ transition:none; } .restbar.done .rest-count{ animation:none; } }
+
+/* Biblioteca: selector por músculo y ficha del ejercicio, en hojas a pantalla completa */
+body.sheet-open{ overflow:hidden; }
+body.sheet-open .toast{ bottom:calc(16px + env(safe-area-inset-bottom, 0px)); }
+.sheet{ position:fixed; inset:0; z-index:40; background:var(--bg); overflow-y:auto; overscroll-behavior:contain;
+  padding:env(safe-area-inset-top, 0px) max(16px, env(safe-area-inset-right, 0px)) calc(28px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+.sheet.fx{ z-index:45; }
+.sheet-in{ max-width:640px; margin:0 auto; display:flex; flex-direction:column; gap:12px; }
+.sheet-head{ position:sticky; top:0; z-index:2; display:flex; align-items:center; justify-content:space-between; gap:10px; background:var(--bg); padding:8px 0 4px; }
+.sheet-head .section-title{ margin:0; }
+.pk-q{ width:100%; }
+.maps{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.maps figure{ margin:0; display:flex; flex-direction:column; align-items:center; gap:2px; }
+.maps figcaption{ font-size:12.5px; color:var(--muted); }
+.body{ display:block; width:100%; max-width:170px; height:auto; }
+.maps.sm .body{ max-width:110px; }
+.bn{ fill:var(--mus-n); }
+.bm{ fill:var(--mus); stroke:var(--bg); stroke-width:1; }
+.body.tap .bm{ cursor:pointer; }
+.bm.on{ fill:var(--accent); }
+.bm.sec{ fill:var(--accent); fill-opacity:.5; }
+.pill.sm{ min-height:36px; padding:4px 12px; font-size:14px; }
+.pk-results{ display:flex; flex-direction:column; gap:8px; scroll-margin-top:56px; }
+.pk-list{ list-style:none; margin:0 0 6px; padding:0; display:flex; flex-direction:column; gap:8px; }
+.pk-row{ display:flex; align-items:center; gap:8px; background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:6px 8px 6px 6px; }
+.pk-info{ flex:1; min-width:0; display:flex; align-items:center; gap:10px; background:none; border:0; padding:0; text-align:left; }
+.pk-img{ flex-shrink:0; width:72px; height:52px; border-radius:8px; object-fit:cover; background:#fff; }
+.noimg{ display:grid; place-items:center; background:var(--surface-2); color:var(--muted); }
+.noimg svg{ width:24px; height:24px; }
+.pk-txt{ display:flex; flex-direction:column; min-width:0; }
+.pk-txt b{ font-size:15px; line-height:1.25; }
+.pk-txt small{ font-size:13px; color:var(--muted); line-height:1.3; }
+.pk-add{ flex-shrink:0; width:44px; height:44px; border-radius:10px; border:1.5px solid var(--accent); background:var(--accent-soft); color:var(--accent); font-size:26px; font-weight:700; line-height:1; }
+.pk-in{ flex-shrink:0; width:44px; height:44px; display:grid; place-items:center; color:var(--done); }
+.pk-in svg{ width:22px; height:22px; }
+.pk-hint{ text-align:center; padding:6px 0; }
+.anim{ position:relative; aspect-ratio:3 / 2; border-radius:var(--r); overflow:hidden; background:#fff; border:1px solid var(--line); }
+.anim img{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+.anim img.b{ animation:fx-swap 2.8s ease-in-out infinite; }
+@keyframes fx-swap{ 0%, 40%{ opacity:0; } 50%, 90%{ opacity:1; } 100%{ opacity:0; } }
+.fx-name{ font-family:var(--display); font-weight:700; font-size:30px; line-height:1.05; text-transform:uppercase; }
+.sub{ font-size:16px; }
+.fx-muscles{ display:grid; grid-template-columns:minmax(0, 230px) 1fr; align-items:center; gap:12px; }
+.key{ display:inline-block; width:12px; height:12px; border-radius:3px; margin-right:6px; vertical-align:-1px; background:var(--accent); }
+.key.sec{ opacity:.5; }
+.stat b.sm{ font-size:20px; line-height:1.15; }
+.center{ text-align:center; }
+.ex-name{ display:flex; align-items:center; gap:10px; background:none; border:0; padding:0; min-height:40px; text-align:left; font:inherit; color:inherit; min-width:0; }
+.ex-name span{ text-decoration:underline dotted var(--muted); text-underline-offset:4px; }
+.ex-thumb{ flex-shrink:0; width:54px; height:40px; border-radius:8px; object-fit:cover; background:#fff; }
+.h-link{ background:none; border:0; padding:0; text-align:left; font:inherit; font-weight:700; font-size:15px; color:inherit; text-decoration:underline dotted var(--muted); text-underline-offset:4px; }
+@media (max-width:440px){ .fx-muscles{ grid-template-columns:1fr; } }
+@media (prefers-reduced-motion: reduce){ .toast, .rest-fill, .status .bar i{ transition:none; } .restbar.done .rest-count{ animation:none; }
+  .anim{ display:grid; grid-template-columns:1fr 1fr; aspect-ratio:3 / 1; } .anim img{ position:static; } .anim img.b{ animation:none; } }
 @media (max-width:360px){
   .srow, .shead{ grid-template-columns:24px minmax(0, 1fr) 56px 56px 44px; gap:4px; }
   .sets.nw .srow, .sets.nw .shead{ grid-template-columns:24px minmax(0, 1fr) 68px 44px; }
@@ -250,6 +303,7 @@ body.resting .toast{ bottom:calc(var(--nav-h) + var(--rest-h) + 16px + env(safe-
 </head>
 <body>
 <div id="app" class="app"><p class="empty">Cargando…</p></div>
+<script src="ejercicios.js"></script>
 <script>
 (function(){
 'use strict';
@@ -641,14 +695,180 @@ function buildDraft(k){
   return { session:k, date: todayISO(), created: todayISO(), note:'', startedAt:null, items: (S.templates[k] || []).map(draftItem) };
 }
 const catalogItem = id => { for (const g of CATALOG) { const e = g.items.find(x => x.id === id); if (e) return e; } return null; };
-function viewCatalog(d){
-  const inSession = new Set(d.items.map(it => it.id));
-  return '<section class="card catalog"><div class="row between"><h2 class="section-title" style="margin:0">Añadir ejercicio</h2><button class="btn-text" data-act="cat-close">Cerrar</button></div>' +
-    CATALOG.map(g => '<div class="cat-group"><span class="lab">' + esc(g.group) + '</span><div class="cat-items">' +
-      g.items.map(e => inSession.has(e.id)
-        ? '<button class="pill" disabled aria-label="' + esc(e.name) + ', ya está en la sesión">✓ ' + esc(e.name) + '</button>'
-        : '<button class="pill" data-act="cat-add" data-v="' + esc(e.id) + '">+ ' + esc(e.name) + '</button>').join('') +
-    '</div></div>').join('') + '</section>';
+
+/* ---------- Biblioteca de ejercicios (ejercicios.js) ---------- */
+const MUSCLES = [['pecho', 'Pecho'], ['hombro', 'Hombro'], ['biceps', 'Bíceps'], ['triceps', 'Tríceps'], ['antebrazo', 'Antebrazo'], ['abdomen', 'Abdomen'],
+  ['trapecio', 'Trapecio'], ['dorsal', 'Dorsal'], ['espalda', 'Espalda media'], ['lumbar', 'Lumbar'], ['gluteo', 'Glúteo'], ['cuadriceps', 'Cuádriceps'],
+  ['isquios', 'Isquios'], ['aductor', 'Aductores'], ['abductor', 'Abductores'], ['gemelo', 'Gemelos'], ['cardio', 'Cardio']];
+const MNAME = Object.fromEntries(MUSCLES);
+const EQUIP = [['mancuernas', 'Mancuernas'], ['kettlebell', 'Kettlebell'], ['polea', 'Polea'], ['barra', 'Barra'], ['corporal', 'Peso corporal']];
+const EQNAME = Object.assign({ otro:'Otro' }, Object.fromEntries(EQUIP));
+/* Los del catálogo de siempre conservan sus series, rangos y notas; los nuevos llevan unos de partida */
+const LIB = new Map();
+(function buildLib(){
+  for (const e of (window.EXLIB || [])) {
+    const c = catalogItem(e.id), bw = e.eq === 'corporal' || e.eq === 'barra', iso = e.mech === 'i';
+    const base = c ? clone(c) : { id:e.id, name:e.name, kind:'reps', sets:3, min: iso ? 10 : 8, max: iso ? 15 : 12, weight: bw ? 0 : null, step: bw ? 0 : (e.eq === 'kettlebell' ? 4 : 1), note:'' };
+    LIB.set(e.id, Object.assign(base, { eq:e.eq, m:e.m || [], s:e.s || [], tips:e.tips || [], img:e.img || 0 }));
+  }
+  for (const g of CATALOG) for (const it of g.items) if (!LIB.has(it.id)) LIB.set(it.id, Object.assign(clone(it), { eq:'otro', m:[], s:[], tips:[], img:0 }));
+})();
+const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+const byName = (a, b) => a.name.localeCompare(b.name, 'es');
+const exImg = (id, n) => 'ex/' + encodeURIComponent(id) + '-' + n + '.jpg';
+const muscleText = list => list.map(m => MNAME[m] || m).join(', ');
+function thumb(id, cls, placeholder){
+  const e = LIB.get(id);
+  if (e && e.img) return '<img class="' + cls + '" src="' + exImg(id, 0) + '" alt="" loading="lazy" decoding="async">';
+  return placeholder ? '<span class="' + cls + ' noimg" aria-hidden="true">' + ICON.train + '</span>' : '';
+}
+function exName(id){
+  const e = LIB.get(id); if (e) return e.name;
+  for (const k of KEYS) { const t = (S.templates[k] || []).find(x => x.id === id); if (t) return t.name; }
+  const h = lastEntry(id); return h ? h.item.name : 'Ejercicio';
+}
+function planNote(id){ for (const k of KEYS) { const t = (S.templates[k] || []).find(x => x.id === id); if (t && t.note) return t.note; } return ''; }
+function exHistory(id){
+  const out = [];
+  for (const s of sortedDesc()) { const it = (s.items || []).find(x => x.id === id); if (it) out.push({ date:s.date, item:it }); }
+  return out;
+}
+
+/* Silueta: se dibuja media figura (x ≤ 100) y se refleja. Viewbox 200 × 384 */
+const BODY_N = {
+  front: 'M100 11C91 11 85 19 85 30C85 41 91 49 100 49ZM93 46L100 46L100 59L92 59ZM41 184C36 186 34 192 36 199C38 203 43 203 45 199C47 194 47 189 46 185ZM78 276C72 276 69 280 69 286C70 291 74 293 79 292C84 291 86 287 85 282C84 278 81 276 78 276ZM69 358L80 358L83 372C80 375 70 375 65 372Z',
+  back: 'M100 11C91 11 85 19 85 30C85 41 91 49 100 49ZM93 46L100 46L100 52L92 54ZM41 184C36 186 34 192 36 199C38 203 43 203 45 199C47 194 47 189 46 185ZM69 342L81 342L82 368C78 372 70 372 66 368Z'
+};
+const BODY = {
+  front: {
+    trapecio: 'M92 55C87 60 80 63 72 65L80 69L93 63Z',
+    hombro: 'M71 66C60 66 52 74 51 88C53 94 57 97 61 98C63 88 68 78 79 70Z',
+    pecho: 'M82 70C73 76 66 86 65 99C71 108 85 110 98 106L98 72C92 69 87 68 82 70Z',
+    biceps: 'M51 94C47 105 46 118 48 131C52 134 57 133 60 129C63 117 63 106 61 100Z',
+    antebrazo: 'M47 135C42 149 38 165 37 181C40 183 44 184 47 183C52 168 57 152 60 134C56 137 51 137 47 135Z',
+    abdomen: 'M83 111C81 130 82 150 85 168C89 174 94 177 98 178L98 111ZM66 104C64 122 67 145 76 166L81 168C78 148 77 128 79 109Z',
+    abductor: 'M71 172C65 179 62 190 62 204C65 201 68 196 70 190C72 184 74 178 77 174Z',
+    cuadriceps: 'M78 178C72 190 65 206 64 226C63 244 65 258 69 270C74 275 82 275 87 270C91 252 92 230 91 210C89 198 85 188 78 178Z',
+    aductor: 'M84 178C89 188 94 200 97 214C98 222 97 232 95 242C93 230 92 214 90 202C88 194 86 186 84 178Z',
+    gemelo: 'M69 296C64 312 65 332 69 352L77 352C81 334 82 314 80 297C77 294 72 294 69 296Z'
+  },
+  back: {
+    trapecio: 'M100 47L92 54C87 59 80 62 71 66C81 75 91 87 100 101Z',
+    hombro: 'M70 67C59 68 52 76 51 89C54 95 58 97 62 97C64 87 68 78 78 72Z',
+    triceps: 'M51 93C47 105 46 118 48 131C52 134 57 133 61 128C63 116 63 105 62 98Z',
+    antebrazo: 'M47 135C42 149 38 165 37 181C40 183 44 184 47 183C52 168 57 152 60 134C56 137 51 137 47 135Z',
+    dorsal: 'M77 80C68 90 65 106 68 122C73 136 82 146 92 152L94 132C88 124 82 112 79 100C77 93 77 86 77 80Z',
+    espalda: 'M100 104C92 94 85 85 80 78C78 88 80 100 85 108C90 114 95 118 100 121Z',
+    lumbar: 'M100 124C96 127 95 133 95 140L95 160C97 162 99 163 100 163Z',
+    gluteo: 'M100 166C88 160 74 164 68 176C64 190 68 204 80 208C90 210 98 206 100 200Z',
+    isquios: 'M68 212C64 232 64 254 68 274C74 280 84 280 90 274C94 254 94 232 92 212C84 215 74 215 68 212Z',
+    gemelo: 'M67 288C61 302 62 320 68 334C72 339 78 339 82 331C86 317 85 301 80 288C76 284 71 284 67 288Z'
+  }
+};
+const mirror = d => '<path d="' + d + '"/><path d="' + d + '" transform="matrix(-1 0 0 1 200 0)"/>';
+function bodySvg(side, cls, tap){
+  const parts = Object.keys(BODY[side]).map(m => {
+    const c = cls(m);
+    return '<g class="bm' + (c ? ' ' + c : '') + '"' + (tap ? ' data-act="pk-m" data-v="' + m + '"' : '') + '>' + mirror(BODY[side][m]) + '</g>';
+  }).join('');
+  return '<svg class="body' + (tap ? ' tap' : '') + '" viewBox="0 0 200 384" aria-hidden="true"><g class="bn">' + mirror(BODY_N[side]) + '</g>' + parts + '</svg>';
+}
+const bodyMaps = (cls, tap, extra) => '<div class="maps' + (extra || '') + '"><figure>' + bodySvg('front', cls, tap) + '<figcaption>Delante</figcaption></figure><figure>' + bodySvg('back', cls, tap) + '<figcaption>Detrás</figcaption></figure></div>';
+
+/* Hojas a pantalla completa (selector y ficha). El botón atrás del móvil las cierra */
+let sheetHist = 0, skipPop = 0;
+function openSheet(){ try { history.pushState({ diarioSheet:true }, ''); sheetHist++; } catch (e) {} }
+function closeSheet(){
+  if (S.fx) S.fx = null; else if (S.pick) S.pick = null;
+  if (sheetHist > 0) { sheetHist--; skipPop++; try { history.back(); } catch (e) { skipPop--; } }
+}
+window.addEventListener('popstate', () => {
+  if (skipPop > 0) { skipPop--; return; }
+  if (sheetHist > 0) { sheetHist--; if (S.fx) S.fx = null; else S.pick = null; render(); }
+});
+
+/* Selector: por músculo (figura o chips), material y búsqueda */
+function pickIds(){
+  if (S.pick.ctx === 'plan') { const ed = ensureEdit(); return (ed.tpl[ed.key] || []).map(e => e.id); }
+  return curDraft().items.map(it => it.id);
+}
+function addFromLib(id){
+  const e = LIB.get(id); if (!e || !S.pick) return;
+  if (S.pick.ctx === 'plan') {
+    const ed = ensureEdit(), l = ed.tpl[ed.key];
+    if (l.some(x => x.id === id)) return;
+    l.push({ id:e.id, name:e.name, kind:e.kind, sets:e.sets, min:e.min, max:e.max, weight:e.weight, step:e.step, note:e.note || '' });
+    ed.dirty = true;
+  } else {
+    const d = curDraft(); if (d.items.some(it => it.id === id)) return;
+    d.items.push(draftItem(e)); saveDrafts();
+  }
+  toast(S.pick.ctx === 'plan' ? e.name + ' añadido. Luego pulsa Guardar cambios' : e.name + ' añadido');
+}
+function pickResults(){
+  const p = S.pick, have = new Set(pickIds()), q = norm(p.q.trim());
+  const pool = Array.from(LIB.values()).filter(e => !p.eq || e.eq === p.eq);
+  let main = [], also = [], title = '';
+  if (q) { main = pool.filter(e => norm(e.name).includes(q) || e.m.some(m => norm(MNAME[m]).includes(q))); title = 'Resultados'; }
+  else if (p.m) { main = pool.filter(e => e.m.includes(p.m)); also = pool.filter(e => !e.m.includes(p.m) && e.s.includes(p.m)); title = MNAME[p.m]; }
+  else if (p.eq) { main = pool; title = EQNAME[p.eq]; }
+  else return '<p class="small muted pk-hint">Toca un músculo en la figura, elige un grupo o busca por nombre.</p>';
+  main.sort(byName); also.sort(byName);
+  const row = e => '<li class="pk-row"><button class="pk-info" data-act="fx-open" data-v="' + esc(e.id) + '">' + thumb(e.id, 'pk-img', true) +
+    '<span class="pk-txt"><b>' + esc(e.name) + '</b><small>' + esc([muscleText(e.m), EQNAME[e.eq]].filter(Boolean).join(' · ')) + '</small></span></button>' +
+    (have.has(e.id) ? '<span class="pk-in" role="img" aria-label="Ya añadido">' + ICON.check + '</span>' : '<button class="pk-add" data-act="pk-add" data-v="' + esc(e.id) + '" aria-label="Añadir ' + esc(e.name) + '">+</button>') + '</li>';
+  return '<p class="lab">' + esc(title) + ' · ' + main.length + '</p>' +
+    (main.length ? '<ul class="pk-list">' + main.map(row).join('') + '</ul>' : '<p class="small muted">No hay ninguno con ese filtro.</p>') +
+    (also.length ? '<p class="lab">También lo trabajan · ' + also.length + '</p><ul class="pk-list">' + also.map(row).join('') + '</ul>' : '');
+}
+function viewPicker(){
+  const p = S.pick;
+  const where = p.ctx === 'plan' ? 'Se añade al plan de la sesión ' + ensureEdit().key + '.' : 'Se añade a la sesión ' + S.active + ' de hoy.';
+  const pills = (list, act, cur) => list.map(x => '<button class="pill sm" data-act="' + act + '" data-v="' + x[0] + '" aria-pressed="' + (cur === x[0]) + '">' + x[1] + '</button>').join('');
+  return '<div class="sheet" data-sheet="pick" role="dialog" aria-modal="true" aria-labelledby="pk-title"><div class="sheet-in">' +
+    '<div class="sheet-head"><h2 id="pk-title" class="section-title">Añadir ejercicio</h2><button class="btn-text" data-act="sheet-close">Hecho</button></div>' +
+    '<p class="small muted">' + where + ' Toca un ejercicio para ver cómo se hace.</p>' +
+    '<input type="search" class="pk-q" data-key="pk-q" data-act="pk-q" value="' + esc(p.q) + '" placeholder="Buscar: curl, sentadilla, polea…" aria-label="Buscar ejercicio" autocomplete="off" enterkeyhint="search">' +
+    bodyMaps(m => p.m === m ? 'on' : '', true) +
+    '<div class="chips" role="group" aria-label="Músculo">' + pills(MUSCLES, 'pk-m', p.m) + '</div>' +
+    '<div class="chips" role="group" aria-label="Material"><span class="lab">Material</span>' + pills(EQUIP, 'pk-eq', p.eq) + '</div>' +
+    '<div id="pk-results" class="pk-results">' + pickResults() + '</div>' +
+    (p.ctx === 'plan' ? '<button class="btn-soft" data-act="e-add">Crear uno a mano</button>' : '') +
+  '</div></div>';
+}
+
+/* Ficha del ejercicio: animación, músculos, técnica e historial */
+function viewFicha(){
+  const id = S.fx.id, e = LIB.get(id), name = exName(id), hist = exHistory(id);
+  const media = e && e.img ? '<div class="anim">' + '<img src="' + exImg(id, 0) + '" alt="' + esc(name) + ', posición inicial">' +
+    (e.img > 1 ? '<img class="b" src="' + exImg(id, 1) + '" alt="' + esc(name) + ', posición final">' : '') + '</div>' : '';
+  const hasMap = e && e.m.concat(e.s).some(m => m !== 'cardio');
+  const muscles = e && (e.m.length || e.s.length) ? '<section class="card fx-muscles">' + (hasMap ? bodyMaps(m => e.m.includes(m) ? 'on' : (e.s.includes(m) ? 'sec' : ''), false, ' sm') : '') +
+    '<div><p class="small"><span class="key"></span><b>Principal:</b> ' + esc(muscleText(e.m)) + '</p>' +
+    (e.s.length ? '<p class="small"><span class="key sec"></span><b>También:</b> ' + esc(muscleText(e.s)) + '</p>' : '') +
+    '<p class="small muted">' + esc(EQNAME[e.eq] || '') + '</p></div></section>' : '';
+  const note = planNote(id);
+  const tips = (e && e.tips.length) || note ? '<section class="card"><h3 class="sub">Cómo se hace</h3>' +
+    (e && e.tips.length ? '<ol class="guide">' + e.tips.map(t => '<li>' + esc(t) + '</li>').join('') + '</ol>' : '') +
+    (note ? '<p class="ex-note">Nota del plan: ' + esc(note) + '</p>' : '') + '</section>' : '';
+  let histBox;
+  if (hist.length) {
+    const ws = hist.map(h => h.item.weight).filter(w => w != null), bw = ws.length ? Math.max(...ws) : null;
+    const top = Math.max(0, ...hist.filter(h => h.item.weight === bw).map(h => topAtW(h.item)));
+    const u = hist[0].item.kind === 'time' ? ' s' : ' reps';
+    const best = (bw ? fmtW(bw) + ' × ' : '') + fmtNum(top) + u;
+    histBox = '<div class="stats"><div class="stat"><b>' + hist.length + '</b><small>' + (hist.length === 1 ? 'vez' : 'veces') + '</small></div>' +
+      '<div class="stat"><b class="sm">' + esc(best) + '</b><small>mejor serie</small></div><div class="stat"><b class="sm">' + esc(fmtDate(hist[0].date)) + '</b><small>última vez</small></div></div>' +
+      '<ul class="hist-list">' + hist.slice(0, 6).map(h => '<li><span class="h-name">' + esc(fmtLong(h.date)) + '</span><span class="h-val">' + esc(entryText(h.item)) + '</span></li>').join('') + '</ul>' +
+      (hist.length > 6 ? '<p class="small muted">Y ' + (hist.length - 6) + ' más en Historial.</p>' : '');
+  } else histBox = '<p class="small muted">Aún no lo ha hecho.</p>';
+  let add = '';
+  if (S.pick && e) add = pickIds().indexOf(id) >= 0 ? '<p class="small muted center">Ya está añadido.</p>' : '<button class="btn-primary" data-act="fx-add" data-v="' + esc(id) + '">Añadir</button>';
+  return '<div class="sheet fx" data-sheet="fx" role="dialog" aria-modal="true" aria-labelledby="fx-title"><div class="sheet-in">' +
+    '<div class="sheet-head"><button class="btn-text" data-act="sheet-close">← Volver</button></div>' +
+    media + '<h2 id="fx-title" class="fx-name">' + esc(name) + '</h2>' + muscles + tips +
+    '<section class="card"><h3 class="sub">Historial</h3>' + histBox + '</section>' + add +
+  '</div></div>';
 }
 function ensureDraft(k){
   if (!S.drafts[k]) S.drafts[k] = buildDraft(k);
@@ -788,7 +1008,7 @@ function viewEx(it, i, k){
   const canDel = it.reps.length > 1 && !it.done[it.reps.length - 1];
   const eff = [['facil', 'Fácil'], ['justo', 'Justo'], ['duro', 'Duro']].map(p => '<button class="chip chip-' + p[0] + '" data-act="effort" data-i="' + i + '" data-v="' + p[0] + '" aria-pressed="' + (it.effort === p[0]) + '">' + p[1] + '</button>').join('');
   return '<section class="card ex' + (allDone ? ' is-done' : '') + '">' +
-    '<div class="ex-top"><h3>' + esc(it.name) + '</h3><span class="tag">' + (allDone ? '✓ ' : '') + it.n + ' × ' + range + (isTime ? ' s' : '') + '</span></div>' +
+    '<div class="ex-top"><h3><button class="ex-name" data-act="fx-open" data-v="' + esc(it.id) + '">' + thumb(it.id, 'ex-thumb') + '<span>' + esc(it.name) + '</span></button></h3><span class="tag">' + (allDone ? '✓ ' : '') + it.n + ' × ' + range + (isTime ? ' s' : '') + '</span></div>' +
     (it.note ? '<p class="ex-note">' + esc(it.note) + '</p>' : '') +
     '<div class="sug"><span>' + esc(sug.text) + '</span>' + useBtn + '</div>' +
     '<div class="sets' + (showW ? '' : ' nw') + '"><div class="shead" aria-hidden="true"><span>Serie</span><span>Anterior</span>' + (showW ? '<span>Kg</span>' : '') + '<span>' + (isTime ? 'Seg' : 'Reps') + '</span><span>✓</span></div>' + rows + '</div>' +
@@ -822,8 +1042,7 @@ function viewTrain(){
   if (!d.startedAt && lastS && lastS.date === t) restNote = '<p class="notice warn">Hoy ya ha entrenado. Si hace algo más, mejor la Libre con poco peso: comba, core o movilidad.</p>';
   else if (!d.startedAt && lastS && lastS.date === addDays(t, -1)) restNote = '<p class="notice warn">Ayer ya entrenó. Si hoy entrena, mejor la Libre con poco peso o solo core y comba, y dejar A y B para mañana.</p>';
   const anyDone = d.items.some(it => it.done.some(Boolean));
-  const addBox = S.catalogOpen ? viewCatalog(d)
-    : '<div class="row"><button class="btn-soft" data-act="cat-open">+ Añadir ejercicio</button>' +
+  const addBox = '<div class="row"><button class="btn-soft" data-act="pk-open" data-v="train">+ Añadir ejercicio</button>' +
       (k === 'L' && d.items.length && !anyDone ? '<button class="btn-text muted" data-act="clear-free">Vaciar y elegir yo los ejercicios</button>' : '') + '</div>';
   const emptyTxt = k === 'L' ? '<p class="empty">Sesión vacía. Añade los ejercicios que quieras hacer hoy.</p>' : '<p class="empty">Esta sesión no tiene ejercicios. Añádelos en Plan.</p>';
   return header('Entrenar', trainMeta()) + '<div class="sessions three" role="group" aria-label="Sesión">' + seg + '</div>' + restNote + status + presets +
@@ -838,7 +1057,7 @@ function viewHistory(){
   const list = sortedDesc().map(s => {
     const r = recs[s.id] || {};
     const dur = s.startedAt && s.endedAt ? Math.round((s.endedAt - s.startedAt) / 60000) : null;
-    const lines = (s.items || []).map(it => '<li><span class="h-name">' + esc(it.name) + '</span><span class="h-val">' + esc(entryText(it)) + '</span>' + (r[it.id] ? '<span class="rec">Récord de ' + r[it.id] + '</span>' : '') + '</li>').join('');
+    const lines = (s.items || []).map(it => '<li><button class="h-link" data-act="fx-open" data-v="' + esc(it.id) + '">' + esc(it.name) + '</button><span class="h-val">' + esc(entryText(it)) + '</span>' + (r[it.id] ? '<span class="rec">Récord de ' + r[it.id] + '</span>' : '') + '</li>').join('');
     const del = S.confirmDel === s.id
       ? '<button class="btn-text danger" data-act="del" data-v="' + esc(s.id) + '">Pulsa otra vez para borrar</button>'
       : '<button class="btn-text muted" data-act="del" data-v="' + esc(s.id) + '">Borrar</button>';
@@ -966,7 +1185,7 @@ function viewPlan(){
         '<label>Salto de peso (kg)<input type="text" inputmode="decimal" data-key="est-' + kp + '" data-act="e-step" data-i="' + i + '" value="' + esc(e.step == null ? '' : fmtNum(e.step)) + '"></label>' +
       '</div>' +
       '<input type="text" data-key="eno-' + kp + '" data-act="e-note" data-i="' + i + '" value="' + esc(e.note || '') + '" placeholder="Nota (opcional)" aria-label="Nota">' +
-      '<div class="row">' + (i > 0 ? '<button class="btn-text" data-act="e-up" data-i="' + i + '">Subir</button>' : '') + (i < list.length - 1 ? '<button class="btn-text" data-act="e-down" data-i="' + i + '">Bajar</button>' : '') + '<button class="btn-text muted" data-act="e-del" data-i="' + i + '">Quitar</button></div>' +
+      '<div class="row">' + (i > 0 ? '<button class="btn-text" data-act="e-up" data-i="' + i + '">Subir</button>' : '') + (i < list.length - 1 ? '<button class="btn-text" data-act="e-down" data-i="' + i + '">Bajar</button>' : '') + '<button class="btn-text" data-act="fx-open" data-v="' + esc(e.id) + '">Ficha</button><button class="btn-text muted" data-act="e-del" data-i="' + i + '">Quitar</button></div>' +
     '</div>';
   }).join('');
   const np = nextPhaseToApply();
@@ -992,7 +1211,7 @@ function viewPlan(){
     '<h2 class="section-title">Ejercicios de cada sesión</h2>' +
     '<p class="small muted">Para ajustes a mano. Si cambias un ejercicio por otro distinto, añade uno nuevo en vez de renombrarlo, para que la gráfica no los mezcle.</p>' +
     '<div class="sessions three" role="group" aria-label="Sesión a editar">' + seg + '</div>' +
-    '<section class="card">' + (rows || '<p class="small muted">Sin ejercicios.</p>') + '<button class="btn-soft" data-act="e-add">+ Añadir ejercicio</button></section>' +
+    '<section class="card">' + (rows || '<p class="small muted">Sin ejercicios.</p>') + '<button class="btn-soft" data-act="pk-open" data-v="plan">+ Añadir ejercicio</button></section>' +
     '<button class="btn-primary" data-act="e-save"' + (ed.dirty ? '' : ' disabled') + '>' + (ed.dirty ? 'Guardar cambios' : 'Sin cambios') + '</button>' +
     '<button class="btn-text ' + (S.confirmReset ? 'danger' : 'muted') + '" data-act="e-reset">' + (S.confirmReset ? 'Pulsa otra vez para volver al plan inicial' : 'Volver al plan inicial') + '</button>';
 }
@@ -1014,13 +1233,17 @@ function nav(){
 function view(){
   if (!S.templates.L) S.templates.L = clone(DEFAULT_TEMPLATES.L); // configuraciones guardadas antes de existir la Libre
   const body = { train:viewTrain, history:viewHistory, progress:viewProgress, tests:viewTests, plan:viewPlan }[S.tab]();
-  return body + viewRest() + nav() + '<div id="toast" class="toast' + (S.toast ? ' show' : '') + '" role="status" aria-live="polite">' + esc(S.toast) + '</div>';
+  const sheets = (S.pick ? viewPicker() : '') + (S.fx ? viewFicha() : '');
+  return body + viewRest() + nav() + sheets + '<div id="toast" class="toast' + (S.toast ? ' show' : '') + '" role="status" aria-live="polite">' + esc(S.toast) + '</div>';
 }
 function render(){
   const a = document.activeElement;
   const key = S.focusKey || (a && a.dataset ? a.dataset.key : null);
   let sel = null; try { if (a && a.selectionStart != null) sel = [a.selectionStart, a.selectionEnd]; } catch (e) {}
+  const scroll = {}; root.querySelectorAll('.sheet').forEach(el => { scroll[el.dataset.sheet] = el.scrollTop; });
   root.innerHTML = view();
+  root.querySelectorAll('.sheet').forEach(el => { if (scroll[el.dataset.sheet]) el.scrollTop = scroll[el.dataset.sheet]; });
+  document.body.classList.toggle('sheet-open', !!(S.pick || S.fx));
   paintRest();
   if (key) {
     const el = root.querySelector('[data-key="' + (window.CSS && CSS.escape ? CSS.escape(key) : key) + '"]');
@@ -1262,15 +1485,29 @@ function markDone(i, s){
 function onClick(act, ds){
   switch (act) {
     case 'tab': S.tab = ds.v; S.confirmDel = null; S.confirmReset = false; S.confirmPhase = null; S.confirmDiscard = false; render(); window.scrollTo(0, 0); break;
-    case 'session': S.active = ds.v; S.confirmDiscard = false; S.catalogOpen = false; render(); break;
-    case 'cat-open': S.catalogOpen = true; render(); break;
-    case 'cat-close': S.catalogOpen = false; render(); break;
-    case 'cat-add': {
-      const e = catalogItem(ds.v), d = curDraft();
-      if (e && !d.items.some(it => it.id === e.id)) { d.items.push(draftItem(e)); saveDrafts(); toast(e.name + ' añadido al final'); }
-      S.catalogOpen = false; render(); break;
+    case 'session': S.active = ds.v; S.confirmDiscard = false; render(); break;
+    case 'pk-open': {
+      const last = LS.get('pickFilter', {}) || {};
+      S.pick = { ctx: ds.v, m: MNAME[last.m] ? last.m : null, eq: EQNAME[last.eq] ? last.eq : null, q:'' };
+      openSheet(); render(); break;
     }
-    case 'clear-free': { const d = curDraft(); if (!d.items.some(it => it.done.some(Boolean))) { d.items = []; S.catalogOpen = true; saveDrafts(); render(); } break; }
+    case 'pk-m': case 'pk-eq': {
+      const p = S.pick, f = act === 'pk-m' ? 'm' : 'eq';
+      p[f] = p[f] === ds.v ? null : ds.v; p.q = '';
+      LS.set('pickFilter', { m: p.m, eq: p.eq });
+      render();
+      if (act === 'pk-m' && p.m) { const r = document.getElementById('pk-results'); if (r && r.scrollIntoView) r.scrollIntoView({ block:'start', behavior:'smooth' }); }
+      break;
+    }
+    case 'pk-add': addFromLib(ds.v); render(); break;
+    case 'fx-open': S.fx = { id: ds.v }; openSheet(); render(); break;
+    case 'fx-add': addFromLib(ds.v); closeSheet(); render(); break;
+    case 'sheet-close': closeSheet(); render(); break;
+    case 'clear-free': {
+      const d = curDraft();
+      if (!d.items.some(it => it.done.some(Boolean))) { d.items = []; saveDrafts(); S.pick = { ctx:'train', m:null, eq:null, q:'' }; openSheet(); render(); }
+      break;
+    }
     case 'done': markDone(ds.i, Number(ds.s)); break;
     case 'prev': {
       const it = curItem(ds.i), s = Number(ds.s), p = prevSet(lastEntry(it.id), s);
@@ -1307,6 +1544,7 @@ function onClick(act, ds){
     }
     case 'e-del': { const ed = ensureEdit(); ed.tpl[ed.key].splice(Number(ds.i), 1); ed.dirty = true; render(); break; }
     case 'e-add': {
+      if (S.pick) closeSheet();
       const ed = ensureEdit(), l = ed.tpl[ed.key];
       l.push({ id:'ex_' + Date.now().toString(36), name:'', kind:'reps', sets:3, min:10, max:12, weight:null, step:1, note:'' });
       ed.dirty = true; S.focusKey = 'en-' + ed.key + '-' + (l.length - 1); render(); break;
@@ -1332,6 +1570,7 @@ function onField(act, ds, val){
     case 'note': curDraft().note = val; saveDraftsSoon(); break;
     case 'test': testDraft(S.cp).vals[ds.t] = val; break;
     case 'testdate': testDraft(S.cp).date = val; break;
+    case 'pk-q': { S.pick.q = val; const r = document.getElementById('pk-results'); if (r) r.innerHTML = pickResults(); break; }
     case 'prog-ex': S.progEx = val; render(); break;
     case 'e-name': case 'e-sets': case 'e-min': case 'e-max': case 'e-step': case 'e-note': case 'e-kind': {
       const ed = ensureEdit(), e = ed.tpl[ed.key][Number(ds.i)];
@@ -1343,10 +1582,11 @@ function onField(act, ds, val){
 }
 
 document.body.addEventListener('click', e => {
-  const b = e.target.closest('button[data-act]');
+  const b = e.target.closest('button[data-act], g[data-act]');
   if (!b) return;
   onClick(b.dataset.act, b.dataset);
 });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && (S.pick || S.fx)) { closeSheet(); render(); } });
 root.addEventListener('input', e => {
   const el = e.target;
   if (!el.dataset || !el.dataset.act || el.tagName === 'SELECT' || el.type === 'file') return;

@@ -1,8 +1,8 @@
 // Service worker del diario: funciona sin conexión.
 // Al publicar una versión nueva, subir VERSION para que el móvil la recoja.
-const VERSION = 'v1';
+const VERSION = 'v2';
 const CACHE = 'diario-eric-' + VERSION;
-const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png'];
+const SHELL = ['./', 'index.html', 'ejercicios.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
