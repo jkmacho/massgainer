@@ -307,6 +307,8 @@ label.sub{ font-weight:700; }
 .legend .key{ margin:0 2px 0 8px; }
 .legend .key:first-child{ margin-left:0; }
 .key.l1{ opacity:.3; } .key.l2{ opacity:.62; }
+.ex-rest{ display:flex; align-items:center; gap:6px; margin-top:-4px; font-size:14px; color:var(--muted); }
+.ex-rest svg{ width:16px; height:16px; color:var(--accent); }
 .h-link{ background:none; border:0; padding:0; text-align:left; font:inherit; font-weight:700; font-size:15px; color:inherit; text-decoration:underline dotted var(--muted); text-underline-offset:4px; }
 @media (max-width:440px){ .fx-muscles{ grid-template-columns:1fr; } }
 @media (prefers-reduced-motion: reduce){ .toast, .rest-fill, .status .bar i{ transition:none; } .restbar.done .rest-count{ animation:none; }
@@ -718,7 +720,7 @@ function draftItem(t){
   const last = lastEntry(t.id);
   const w = last && last.item.weight != null ? last.item.weight : t.weight;
   const n = Number(t.sets) || 3, wTxt = w == null ? '' : fmtNum(w);
-  return { id:t.id, name:t.name, kind:t.kind, n, min:Number(t.min), max:Number(t.max), step:Number(t.step) || 0, note:t.note || '',
+  return { id:t.id, name:t.name, kind:t.kind, n, min:Number(t.min), max:Number(t.max), step:Number(t.step) || 0, note:t.note || '', rest:Number(t.rest) || 0,
     weight: wTxt, reps: Array.from({ length:n }, () => ''), setW: Array.from({ length:n }, () => wTxt), done: Array.from({ length:n }, () => false), effort:null, skip:false };
 }
 function buildDraft(k){
@@ -1045,6 +1047,8 @@ function trainMeta(){
   return m;
 }
 
+const RESTS = [60, 90, 120, 180];
+const restLabel = sec => sec % 60 ? sec + ' s' : (sec / 60) + ' min';
 function viewEx(it, i, k){
   if (it.skip) {
     return '<section class="card ex is-skipped"><div class="ex-top"><h3>' + esc(it.name) + '</h3><button class="btn-text" data-act="skip" data-i="' + i + '">Recuperar</button></div><p class="small muted">Hoy no lo hace.</p></section>';
@@ -1068,7 +1072,8 @@ function viewEx(it, i, k){
   const eff = [['facil', 'Fácil'], ['justo', 'Justo'], ['duro', 'Duro']].map(p => '<button class="chip chip-' + p[0] + '" data-act="effort" data-i="' + i + '" data-v="' + p[0] + '" aria-pressed="' + (it.effort === p[0]) + '">' + p[1] + '</button>').join('');
   return '<section class="card ex' + (allDone ? ' is-done' : '') + '">' +
     '<div class="ex-top"><h3><button class="ex-name" data-act="fx-open" data-v="' + esc(it.id) + '">' + thumb(it.id, 'ex-thumb') + '<span>' + esc(it.name) + '</span></button></h3><span class="tag">' + (allDone ? '✓ ' : '') + it.n + ' × ' + range + (isTime ? ' s' : '') + '</span></div>' +
-    (it.note ? '<p class="ex-note">' + esc(it.note) + '</p>' : '') + exNotesView(it, i, k, last) +
+    (it.note ? '<p class="ex-note">' + esc(it.note) + '</p>' : '') +
+    (it.rest && it.rest !== S.restSec ? '<p class="ex-rest">' + ICON.clock + 'Descanso ' + restLabel(it.rest) + '</p>' : '') + exNotesView(it, i, k, last) +
     '<div class="sug"><span>' + esc(sug.text) + '</span>' + useBtn + '</div>' +
     '<div class="sets' + (showW ? '' : ' nw') + '"><div class="shead" aria-hidden="true"><span>Serie</span><span>Anterior</span>' + (showW ? '<span>Kg</span>' : '') + '<span>' + (isTime ? 'Seg' : 'Reps') + '</span><span>✓</span></div>' + rows + '</div>' +
     '<div class="ex-actions"><button class="btn-soft" data-act="set-add" data-i="' + i + '">+ Añadir serie</button>' + (canDel ? '<button class="btn-text muted" data-act="set-del" data-i="' + i + '">Quitar la última</button>' : '') + '</div>' +
@@ -1294,6 +1299,7 @@ function viewPlan(){
         '<label>Series<input type="text" inputmode="numeric" data-key="es-' + kp + '" data-act="e-sets" data-i="' + i + '" value="' + esc(e.sets) + '"></label>' +
         '<label>Mínimo<input type="text" inputmode="numeric" data-key="emi-' + kp + '" data-act="e-min" data-i="' + i + '" value="' + esc(e.min) + '"></label>' +
         '<label>Máximo<input type="text" inputmode="numeric" data-key="ema-' + kp + '" data-act="e-max" data-i="' + i + '" value="' + esc(e.max) + '"></label>' +
+        '<label>Descanso<select data-act="e-rest" data-i="' + i + '"><option value="">El general</option>' + RESTS.map(r => '<option value="' + r + '"' + (Number(e.rest) === r ? ' selected' : '') + '>' + restLabel(r) + '</option>').join('') + '</select></label>' +
         '<label>Salto de peso (kg)<input type="text" inputmode="decimal" data-key="est-' + kp + '" data-act="e-step" data-i="' + i + '" value="' + esc(e.step == null ? '' : fmtNum(e.step)) + '"></label>' +
       '</div>' +
       '<input type="text" data-key="eno-' + kp + '" data-act="e-note" data-i="' + i + '" value="' + esc(e.note || '') + '" placeholder="Nota (opcional)" aria-label="Nota">' +
@@ -1427,8 +1433,12 @@ async function saveTemplatesAction(){
     out[k] = (S.edit.tpl[k] || []).filter(e => String(e.name || '').trim()).map(e => {
       const min = clampInt(e.min, 1, 600, 10), max = Math.max(min, clampInt(e.max, 1, 600, min));
       const st = num(e.step);
-      return { id: e.id, name: String(e.name).trim(), kind: e.kind === 'time' ? 'time' : 'reps', sets: clampInt(e.sets, 1, 8, 3), min, max,
+      const out = { id: e.id, name: String(e.name).trim(), kind: e.kind === 'time' ? 'time' : 'reps', sets: clampInt(e.sets, 1, 8, 3), min, max,
         weight: e.weight == null ? null : e.weight, step: st == null ? 0 : Math.max(0, st), note: String(e.note || '').trim() };
+      if (RESTS.indexOf(Number(e.rest)) >= 0) out.rest = Number(e.rest);
+      if (Array.isArray(e.m) && e.m.length) out.m = e.m.slice();
+      if (e.eq) out.eq = e.eq;
+      return out;
     });
   }
   try {
@@ -1592,7 +1602,7 @@ function markDone(i, s){
   if (!d.startedAt) d.startedAt = Date.now();
   saveDrafts();
   const pr = draftProgress(d);
-  if (pr.done < pr.total) startRest(S.restSec); else stopRest();
+  if (pr.done < pr.total) startRest(it.rest || S.restSec); else stopRest();
   render();
 }
 
@@ -1696,9 +1706,9 @@ function onField(act, ds, val){
     case 'testdate': testDraft(S.cp).date = val; break;
     case 'pk-q': { S.pick.q = val; const r = document.getElementById('pk-results'); if (r) r.innerHTML = pickResults(); break; }
     case 'prog-ex': S.progEx = val; render(); break;
-    case 'e-name': case 'e-sets': case 'e-min': case 'e-max': case 'e-step': case 'e-note': case 'e-kind': {
+    case 'e-name': case 'e-sets': case 'e-min': case 'e-max': case 'e-step': case 'e-note': case 'e-kind': case 'e-rest': {
       const ed = ensureEdit(), e = ed.tpl[ed.key][Number(ds.i)];
-      const field = { 'e-name':'name', 'e-sets':'sets', 'e-min':'min', 'e-max':'max', 'e-step':'step', 'e-note':'note', 'e-kind':'kind' }[act];
+      const field = { 'e-name':'name', 'e-sets':'sets', 'e-min':'min', 'e-max':'max', 'e-step':'step', 'e-note':'note', 'e-kind':'kind', 'e-rest':'rest' }[act];
       if (e) { e[field] = val; if (!ed.dirty) { ed.dirty = true; const b = root.querySelector('[data-act="e-save"]'); if (b) { b.disabled = false; b.textContent = 'Guardar cambios'; } } }
       break;
     }
