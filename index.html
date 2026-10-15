@@ -209,7 +209,7 @@ h1{ font-family:var(--display); font-weight:700; font-size:38px; line-height:1; 
 .guide{ margin:0; padding-left:20px; display:flex; flex-direction:column; gap:6px; font-size:15px; }
 .erow{ display:flex; flex-direction:column; gap:8px; padding:12px 0; border-bottom:1px solid var(--line); }
 .erow:last-of-type{ border-bottom:0; }
-.erow > input{ width:100%; font-weight:700; }
+.erow > input{ width:100%; }
 .egrid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(92px, 1fr)); gap:8px; }
 .egrid label{ display:flex; flex-direction:column; gap:3px; font-size:13px; color:var(--muted); }
 .egrid input, .egrid select{ width:100%; }
@@ -309,6 +309,10 @@ label.sub{ font-weight:700; }
 .key.l1{ opacity:.3; } .key.l2{ opacity:.62; }
 .ex-rest{ display:flex; align-items:center; gap:6px; margin-top:-4px; font-size:14px; color:var(--muted); }
 .ex-rest svg{ width:16px; height:16px; color:var(--accent); }
+.erow-top{ display:flex; align-items:center; gap:10px; }
+.erow-top input{ flex:1; min-width:0; font-weight:700; }
+.erow-top .ex-thumb{ width:58px; height:44px; }
+.erow-top .noimg svg{ width:20px; height:20px; }
 .h-link{ background:none; border:0; padding:0; text-align:left; font:inherit; font-weight:700; font-size:15px; color:inherit; text-decoration:underline dotted var(--muted); text-underline-offset:4px; }
 @media (max-width:440px){ .fx-muscles{ grid-template-columns:1fr; } }
 @media (prefers-reduced-motion: reduce){ .toast, .rest-fill, .status .bar i{ transition:none; } .restbar.done .rest-count{ animation:none; }
@@ -745,6 +749,15 @@ const LIB = new Map();
   }
   for (const g of CATALOG) for (const it of g.items) if (!LIB.has(it.id)) LIB.set(it.id, Object.assign(clone(it), { eq:'otro', m:[], s:[], tips:[], img:0 }));
 })();
+const LIB_BASE = new Set(LIB.keys());
+/* Ejercicios propios del plan con músculo indicado: entran en la figura, en Cambiar y en Progreso */
+function registerCustom(){
+  for (const k of KEYS) for (const t of (S.templates[k] || [])) {
+    if (LIB_BASE.has(t.id)) continue;
+    if (Array.isArray(t.m) && t.m.length) LIB.set(t.id, Object.assign(clone(t), { eq: t.eq || 'otro', m: t.m.slice(), s:[], tips:[], img:0, mech:'c' }));
+    else LIB.delete(t.id);
+  }
+}
 const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 const byName = (a, b) => a.name.localeCompare(b.name, 'es');
 const exImg = (id, n) => 'ex/' + encodeURIComponent(id) + '-' + n + '.jpg';
@@ -1292,13 +1305,18 @@ function viewPlan(){
   const list = ed.tpl[ed.key] || [];
   const rows = list.map((e, i) => {
     const kp = ed.key + '-' + i;
+    const own = !LIB_BASE.has(e.id), m0 = Array.isArray(e.m) && e.m[0] ? e.m[0] : '';
+    const ownFields = own ? '<label>Músculo<select data-act="e-m" data-i="' + i + '"><option value="">Sin indicar</option>' + MUSCLES.map(x => '<option value="' + x[0] + '"' + (m0 === x[0] ? ' selected' : '') + '>' + x[1] + '</option>').join('') + '</select></label>' +
+      '<label>Material<select data-act="e-eq" data-i="' + i + '">' + EQUIP.concat([['otro', 'Otro']]).map(x => '<option value="' + x[0] + '"' + ((e.eq || 'otro') === x[0] ? ' selected' : '') + '>' + x[1] + '</option>').join('') + '</select></label>' : '';
     return '<div class="erow">' +
-      '<input type="text" id="en-' + kp + '" data-key="en-' + kp + '" data-act="e-name" data-i="' + i + '" value="' + esc(e.name) + '" placeholder="Nombre del ejercicio" aria-label="Nombre del ejercicio">' +
+      '<div class="erow-top">' + thumb(e.id, 'ex-thumb', true) +
+      '<input type="text" id="en-' + kp + '" data-key="en-' + kp + '" data-act="e-name" data-i="' + i + '" value="' + esc(e.name) + '" placeholder="Nombre del ejercicio" aria-label="Nombre del ejercicio"></div>' +
       '<div class="egrid">' +
         '<label>Mide<select data-act="e-kind" data-i="' + i + '"><option value="reps"' + (e.kind !== 'time' ? ' selected' : '') + '>Repeticiones</option><option value="time"' + (e.kind === 'time' ? ' selected' : '') + '>Segundos</option></select></label>' +
         '<label>Series<input type="text" inputmode="numeric" data-key="es-' + kp + '" data-act="e-sets" data-i="' + i + '" value="' + esc(e.sets) + '"></label>' +
         '<label>Mínimo<input type="text" inputmode="numeric" data-key="emi-' + kp + '" data-act="e-min" data-i="' + i + '" value="' + esc(e.min) + '"></label>' +
         '<label>Máximo<input type="text" inputmode="numeric" data-key="ema-' + kp + '" data-act="e-max" data-i="' + i + '" value="' + esc(e.max) + '"></label>' +
+        ownFields +
         '<label>Descanso<select data-act="e-rest" data-i="' + i + '"><option value="">El general</option>' + RESTS.map(r => '<option value="' + r + '"' + (Number(e.rest) === r ? ' selected' : '') + '>' + restLabel(r) + '</option>').join('') + '</select></label>' +
         '<label>Salto de peso (kg)<input type="text" inputmode="decimal" data-key="est-' + kp + '" data-act="e-step" data-i="' + i + '" value="' + esc(e.step == null ? '' : fmtNum(e.step)) + '"></label>' +
       '</div>' +
@@ -1350,6 +1368,7 @@ function nav(){
 }
 function view(){
   if (!S.templates.L) S.templates.L = clone(DEFAULT_TEMPLATES.L); // configuraciones guardadas antes de existir la Libre
+  registerCustom();
   const body = { train:viewTrain, history:viewHistory, progress:viewProgress, tests:viewTests, plan:viewPlan }[S.tab]();
   const sheets = (S.pick ? viewPicker() : '') + (S.fx ? viewFicha() : '');
   return body + viewRest() + nav() + sheets + '<div id="toast" class="toast' + (S.toast ? ' show' : '') + '" role="status" aria-live="polite">' + esc(S.toast) + '</div>';
@@ -1693,6 +1712,11 @@ function onClick(act, ds){
     case 'import-cancel': S.pendingImport = null; render(); break;
   }
 }
+function markEditDirty(ed){
+  if (ed.dirty) return;
+  ed.dirty = true;
+  const b = root.querySelector('[data-act="e-save"]'); if (b) { b.disabled = false; b.textContent = 'Guardar cambios'; }
+}
 function onField(act, ds, val){
   switch (act) {
     case 'rep': curItem(ds.i).reps[Number(ds.s)] = val; saveDraftsSoon(); break;
@@ -1709,7 +1733,12 @@ function onField(act, ds, val){
     case 'e-name': case 'e-sets': case 'e-min': case 'e-max': case 'e-step': case 'e-note': case 'e-kind': case 'e-rest': {
       const ed = ensureEdit(), e = ed.tpl[ed.key][Number(ds.i)];
       const field = { 'e-name':'name', 'e-sets':'sets', 'e-min':'min', 'e-max':'max', 'e-step':'step', 'e-note':'note', 'e-kind':'kind', 'e-rest':'rest' }[act];
-      if (e) { e[field] = val; if (!ed.dirty) { ed.dirty = true; const b = root.querySelector('[data-act="e-save"]'); if (b) { b.disabled = false; b.textContent = 'Guardar cambios'; } } }
+      if (e) { e[field] = val; markEditDirty(ed); }
+      break;
+    }
+    case 'e-m': case 'e-eq': {
+      const ed = ensureEdit(), e = ed.tpl[ed.key][Number(ds.i)];
+      if (e) { if (act === 'e-m') e.m = val ? [val] : []; else e.eq = val; markEditDirty(ed); }
       break;
     }
   }
