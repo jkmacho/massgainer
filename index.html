@@ -1135,7 +1135,8 @@ function viewTrain(){
   const status = d.startedAt
     ? '<div class="status"><span class="clock">' + ICON.clock + '<span id="elapsed">' + clockText(Date.now() - d.startedAt) + '</span></span><span></span><span class="count">' + pr.done + ' de ' + pr.total + ' series</span><div class="bar"><i style="width:' + (pr.total ? Math.round(pr.done / pr.total * 100) : 0) + '%"></i></div></div>'
     : '<p class="status idle">Marca ✓ en cada serie al terminarla. El descanso empieza solo.</p>';
-  const presets = '<div class="presets" role="group" aria-label="Descanso entre series"><span class="lab">Descanso</span>' +
+  const ownRest = d.items.some(it => it.rest && it.rest !== S.restSec);
+  const presets = '<div class="presets" role="group" aria-label="Descanso entre series"><span class="lab">' + (ownRest ? 'Descanso general' : 'Descanso') + '</span>' +
     [[60, '60 s'], [90, '90 s'], [120, '2 min']].map(p => '<button class="pill" data-act="preset" data-v="' + p[0] + '" aria-pressed="' + (S.restSec === p[0]) + '">' + p[1] + '</button>').join('') + '</div>';
   const items = d.items.map((it, i) => viewEx(it, i, k)).join('');
   const finish = '<section class="card"><label class="lab" for="d-date">Fecha</label><input id="d-date" type="date" data-key="d-date" data-act="date" value="' + esc(d.date) + '">' +
