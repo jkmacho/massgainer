@@ -289,6 +289,15 @@ body.sheet-open .toast{ bottom:calc(16px + env(safe-area-inset-bottom, 0px)); }
 .ex-name{ display:flex; align-items:center; gap:10px; background:none; border:0; padding:0; min-height:40px; text-align:left; font:inherit; color:inherit; min-width:0; }
 .ex-name span{ text-decoration:underline dotted var(--muted); text-underline-offset:4px; }
 .ex-thumb{ flex-shrink:0; width:54px; height:40px; border-radius:8px; object-fit:cover; background:#fff; }
+.ex-pin{ display:flex; gap:6px; align-items:flex-start; margin-top:-4px; font-size:14.5px; font-weight:700; }
+.ex-pin svg{ flex-shrink:0; width:16px; height:16px; margin-top:2px; color:var(--accent); }
+.ex-last, .ex-dnote{ margin-top:-4px; font-size:14px; color:var(--muted); font-style:italic; }
+.ex-notes{ display:flex; flex-direction:column; gap:4px; padding:10px; border-radius:10px; background:var(--surface-2); }
+.ex-notes input{ width:100%; background:var(--surface); }
+.ex-tools{ display:flex; flex-wrap:wrap; align-items:center; gap:0 14px; margin-left:auto; }
+.pk-add.swap{ font-size:22px; }
+.h-note{ font-size:14px; color:var(--muted); font-style:italic; }
+label.sub{ font-weight:700; }
 .h-link{ background:none; border:0; padding:0; text-align:left; font:inherit; font-weight:700; font-size:15px; color:inherit; text-decoration:underline dotted var(--muted); text-underline-offset:4px; }
 @media (max-width:440px){ .fx-muscles{ grid-template-columns:1fr; } }
 @media (prefers-reduced-motion: reduce){ .toast, .rest-fill, .status .bar i{ transition:none; } .restbar.done .rest-count{ animation:none; }
@@ -500,7 +509,7 @@ const S = {
   loaded:{ sessions:false, cfg:false }, drafts:{}, active:null, saving:false,
   confirmDel:null, progEx:null, cp:null, testDrafts:{}, edit:null, confirmReset:false,
   restSec: [60, 90, 120].indexOf(LS.get('restSec', 90)) >= 0 ? LS.get('restSec', 90) : 90,
-  toast:'', dbError:'', canDownload:false, exporting:false, focusKey:null, phasesApplied:[], prevCfg:null, confirmPhase:null
+  exNotes:{}, toast:'', dbError:'', canDownload:false, exporting:false, focusKey:null, phasesApplied:[], prevCfg:null, confirmPhase:null
 };
 (function restoreDrafts(){
   const d = LS.get('drafts', {}); const t = todayISO();
@@ -518,7 +527,7 @@ const store = {
       this.mode = 'db';
       const base = 'data/users/' + uid;
       const cfg = db.doc(base + '/config');
-      this.refs = { cfg, sessions: cfg.collection('sessions'), tests: db.doc(base + '/tests') };
+      this.refs = { cfg, sessions: cfg.collection('sessions'), tests: db.doc(base + '/tests'), notes: db.doc(base + '/notes') };
       this.refs.sessions.onSnapshot(snap => {
         S.sessions = snap.docs.map(d => Object.assign({ id: d.id }, clone(d.data() || {})));
         S.loaded.sessions = true; render();
@@ -529,6 +538,11 @@ const store = {
         S.phasesApplied = d && Array.isArray(d.phasesApplied) ? d.phasesApplied.slice() : [];
         S.prevCfg = d && d.prev && d.prev.templates ? clone(d.prev) : null;
         S.loaded.cfg = true; render();
+      }, err => dbFail(err));
+      this.refs.notes.onSnapshot(snap => {
+        const d = snap.exists ? snap.data() : null;
+        S.exNotes = d && d.values ? clone(d.values) : {};
+        render();
       }, err => dbFail(err));
       this.refs.tests.onSnapshot(snap => {
         const d = snap.exists ? snap.data() : null;
@@ -543,6 +557,7 @@ const store = {
       if (c && c.templates && c.templates.A && c.templates.B) { S.templates = c.templates; S.phasesApplied = c.phasesApplied || []; S.prevCfg = c.prev || null; }
       else { const t = LS.get('templates', null); if (t && t.A && t.B) S.templates = t; }
       S.tests = LS.get('tests', {});
+      S.exNotes = LS.get('exNotes', {}) || {};
       S.loaded.sessions = S.loaded.cfg = true;
       render();
     }
@@ -567,6 +582,11 @@ const store = {
     if (this.mode === 'db') { await this.retry(() => this.refs.cfg.set(body)); }
     else { if (!LS.set('config', body)) throw { message:'no hay espacio en este navegador' }; }
     S.templates = clone(body.templates); S.phasesApplied = body.phasesApplied.slice(); S.prevCfg = body.prev ? clone(body.prev) : null;
+  },
+  async saveNotes(values){
+    if (this.mode === 'db') { await this.retry(() => this.refs.notes.set({ values, updatedAt: Date.now() })); }
+    else { if (!LS.set('exNotes', values)) throw { message:'no hay espacio en este navegador' }; }
+    S.exNotes = clone(values);
   },
   async saveTests(values){
     if (this.mode === 'db') { await this.retry(() => this.refs.tests.set({ values, updatedAt: Date.now() })); }
@@ -680,7 +700,8 @@ const ICON = {
   tests: svg('<circle cx="12" cy="13.5" r="7.5"/><path d="M12 10v3.5l2.5 2M9.5 2.5h5"/>'),
   plan: svg('<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 3h6v3H9zM9 11h6M9 15h4"/>'),
   check: svg('<path d="M5 12.5l4.5 4.5L19 7.5"/>', ' stroke-width="2.6"'),
-  clock: svg('<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9.5 2.5h5"/>')
+  clock: svg('<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9.5 2.5h5"/>'),
+  pin: svg('<path d="M12 16v6M9 3h6l-1 6 3 3v2H7v-2l3-3z"/>')
 };
 
 /* ---------- Borradores de sesión ---------- */
@@ -709,7 +730,7 @@ const LIB = new Map();
   for (const e of (window.EXLIB || [])) {
     const c = catalogItem(e.id), bw = e.eq === 'corporal' || e.eq === 'barra', iso = e.mech === 'i';
     const base = c ? clone(c) : { id:e.id, name:e.name, kind:'reps', sets:3, min: iso ? 10 : 8, max: iso ? 15 : 12, weight: bw ? 0 : null, step: bw ? 0 : (e.eq === 'kettlebell' ? 4 : 1), note:'' };
-    LIB.set(e.id, Object.assign(base, { eq:e.eq, m:e.m || [], s:e.s || [], tips:e.tips || [], img:e.img || 0 }));
+    LIB.set(e.id, Object.assign(base, { eq:e.eq, m:e.m || [], s:e.s || [], tips:e.tips || [], img:e.img || 0, mech:e.mech || 'c' }));
   }
   for (const g of CATALOG) for (const it of g.items) if (!LIB.has(it.id)) LIB.set(it.id, Object.assign(clone(it), { eq:'otro', m:[], s:[], tips:[], img:0 }));
 })();
@@ -788,6 +809,24 @@ window.addEventListener('popstate', () => {
 });
 
 /* Selector: por músculo (figura o chips), material y búsqueda */
+function similarTo(id){
+  const a = LIB.get(id); if (!a || !a.m.length) return [];
+  const out = [];
+  for (const e of LIB.values()) {
+    if (e.id === id) continue;
+    const sp = e.m.filter(m => a.m.indexOf(m) >= 0).length; if (!sp) continue;
+    out.push({ e, sc: sp * 4 + e.s.filter(m => a.s.indexOf(m) >= 0).length + (e.mech === a.mech ? 2 : 0) + (e.kind === a.kind ? 1 : 0) });
+  }
+  return out.sort((x, y) => y.sc - x.sc || byName(x.e, y.e)).map(x => x.e);
+}
+function swapItem(id){
+  const p = S.pick, e = LIB.get(id), d = curDraft(), it = d.items[p.i];
+  if (!e || !it || it.id !== p.from) return;
+  if (it.done.some(Boolean)) { toast('Ya tiene series hechas; añade el otro en vez de cambiarlo'); return; }
+  if (d.items.some(x => x.id === id)) return;
+  d.items[p.i] = draftItem(e); saveDrafts();
+  toast(it.name + ' cambiado por ' + e.name + ' solo hoy');
+}
 function pickIds(){
   if (S.pick.ctx === 'plan') { const ed = ensureEdit(); return (ed.tpl[ed.key] || []).map(e => e.id); }
   return curDraft().items.map(it => it.id);
@@ -810,23 +849,31 @@ function pickResults(){
   const pool = Array.from(LIB.values()).filter(e => !p.eq || e.eq === p.eq);
   let main = [], also = [], title = '';
   if (q) { main = pool.filter(e => norm(e.name).includes(q) || e.m.some(m => norm(MNAME[m]).includes(q))); title = 'Resultados'; }
+  else if (p.ctx === 'swap' && !p.m) {
+    main = similarTo(p.from).filter(e => !p.eq || e.eq === p.eq); title = 'Parecidos';
+    if (!main.length) return '<p class="small muted pk-hint">Toca un músculo en la figura o busca por nombre.</p>';
+  }
   else if (p.m) { main = pool.filter(e => e.m.includes(p.m)); also = pool.filter(e => !e.m.includes(p.m) && e.s.includes(p.m)); title = MNAME[p.m]; }
   else if (p.eq) { main = pool; title = EQNAME[p.eq]; }
   else return '<p class="small muted pk-hint">Toca un músculo en la figura, elige un grupo o busca por nombre.</p>';
-  main.sort(byName); also.sort(byName);
+  if (title !== 'Parecidos') main.sort(byName);
+  also.sort(byName);
   const row = e => '<li class="pk-row"><button class="pk-info" data-act="fx-open" data-v="' + esc(e.id) + '">' + thumb(e.id, 'pk-img', true) +
     '<span class="pk-txt"><b>' + esc(e.name) + '</b><small>' + esc([muscleText(e.m), EQNAME[e.eq]].filter(Boolean).join(' · ')) + '</small></span></button>' +
-    (have.has(e.id) ? '<span class="pk-in" role="img" aria-label="Ya añadido">' + ICON.check + '</span>' : '<button class="pk-add" data-act="pk-add" data-v="' + esc(e.id) + '" aria-label="Añadir ' + esc(e.name) + '">+</button>') + '</li>';
+    (have.has(e.id) ? '<span class="pk-in" role="img" aria-label="Ya está en la sesión">' + ICON.check + '</span>'
+      : p.ctx === 'swap' ? '<button class="pk-add swap" data-act="pk-swap" data-v="' + esc(e.id) + '" aria-label="Cambiar por ' + esc(e.name) + '">⇄</button>'
+      : '<button class="pk-add" data-act="pk-add" data-v="' + esc(e.id) + '" aria-label="Añadir ' + esc(e.name) + '">+</button>') + '</li>';
   return '<p class="lab">' + esc(title) + ' · ' + main.length + '</p>' +
     (main.length ? '<ul class="pk-list">' + main.map(row).join('') + '</ul>' : '<p class="small muted">No hay ninguno con ese filtro.</p>') +
     (also.length ? '<p class="lab">También lo trabajan · ' + also.length + '</p><ul class="pk-list">' + also.map(row).join('') + '</ul>' : '');
 }
 function viewPicker(){
   const p = S.pick;
-  const where = p.ctx === 'plan' ? 'Se añade al plan de la sesión ' + ensureEdit().key + '.' : 'Se añade a la sesión ' + S.active + ' de hoy.';
+  const swap = p.ctx === 'swap';
+  const where = swap ? 'Sustituye a ' + exName(p.from) + ' solo hoy; el plan no cambia.' : p.ctx === 'plan' ? 'Se añade al plan de la sesión ' + ensureEdit().key + '.' : 'Se añade a la sesión ' + S.active + ' de hoy.';
   const pills = (list, act, cur) => list.map(x => '<button class="pill sm" data-act="' + act + '" data-v="' + x[0] + '" aria-pressed="' + (cur === x[0]) + '">' + x[1] + '</button>').join('');
   return '<div class="sheet" data-sheet="pick" role="dialog" aria-modal="true" aria-labelledby="pk-title"><div class="sheet-in">' +
-    '<div class="sheet-head"><h2 id="pk-title" class="section-title">Añadir ejercicio</h2><button class="btn-text" data-act="sheet-close">Hecho</button></div>' +
+    '<div class="sheet-head"><h2 id="pk-title" class="section-title">' + (swap ? 'Cambiar ejercicio' : 'Añadir ejercicio') + '</h2><button class="btn-text" data-act="sheet-close">Hecho</button></div>' +
     '<p class="small muted">' + where + ' Toca un ejercicio para ver cómo se hace.</p>' +
     '<input type="search" class="pk-q" data-key="pk-q" data-act="pk-q" value="' + esc(p.q) + '" placeholder="Buscar: curl, sentadilla, polea…" aria-label="Buscar ejercicio" autocomplete="off" enterkeyhint="search">' +
     bodyMaps(m => p.m === m ? 'on' : '', true) +
@@ -859,14 +906,17 @@ function viewFicha(){
     const best = (bw ? fmtW(bw) + ' × ' : '') + fmtNum(top) + u;
     histBox = '<div class="stats"><div class="stat"><b>' + hist.length + '</b><small>' + (hist.length === 1 ? 'vez' : 'veces') + '</small></div>' +
       '<div class="stat"><b class="sm">' + esc(best) + '</b><small>mejor serie</small></div><div class="stat"><b class="sm">' + esc(fmtDate(hist[0].date)) + '</b><small>última vez</small></div></div>' +
-      '<ul class="hist-list">' + hist.slice(0, 6).map(h => '<li><span class="h-name">' + esc(fmtLong(h.date)) + '</span><span class="h-val">' + esc(entryText(h.item)) + '</span></li>').join('') + '</ul>' +
+      '<ul class="hist-list">' + hist.slice(0, 6).map(h => '<li><span class="h-name">' + esc(fmtLong(h.date)) + '</span><span class="h-val">' + esc(entryText(h.item)) + '</span>' + (h.item.note ? '<span class="h-note">' + esc(h.item.note) + '</span>' : '') + '</li>').join('') + '</ul>' +
       (hist.length > 6 ? '<p class="small muted">Y ' + (hist.length - 6) + ' más en Historial.</p>' : '');
   } else histBox = '<p class="small muted">Aún no lo ha hecho.</p>';
   let add = '';
-  if (S.pick && e) add = pickIds().indexOf(id) >= 0 ? '<p class="small muted center">Ya está añadido.</p>' : '<button class="btn-primary" data-act="fx-add" data-v="' + esc(id) + '">Añadir</button>';
+  if (S.pick && e) add = pickIds().indexOf(id) >= 0 ? '<p class="small muted center">Ya está en la sesión.</p>'
+    : '<button class="btn-primary" data-act="fx-add" data-v="' + esc(id) + '">' + (S.pick.ctx === 'swap' ? 'Cambiar por este' : 'Añadir') + '</button>';
   return '<div class="sheet fx" data-sheet="fx" role="dialog" aria-modal="true" aria-labelledby="fx-title"><div class="sheet-in">' +
     '<div class="sheet-head"><button class="btn-text" data-act="sheet-close">← Volver</button></div>' +
     media + '<h2 id="fx-title" class="fx-name">' + esc(name) + '</h2>' + muscles + tips +
+    '<section class="card"><label class="sub" for="fxn">Nota fija</label>' +
+      '<textarea id="fxn" rows="2" data-key="fxn-' + esc(id) + '" data-act="fx-fixnote" placeholder="Sale cada vez que toca este ejercicio: agujero de la polea, agarre, molestias…">' + esc(S.fx.noteDraft != null ? S.fx.noteDraft : (S.exNotes[id] || '')) + '</textarea></section>' +
     '<section class="card"><h3 class="sub">Historial</h3>' + histBox + '</section>' + add +
   '</div></div>';
 }
@@ -1009,12 +1059,38 @@ function viewEx(it, i, k){
   const eff = [['facil', 'Fácil'], ['justo', 'Justo'], ['duro', 'Duro']].map(p => '<button class="chip chip-' + p[0] + '" data-act="effort" data-i="' + i + '" data-v="' + p[0] + '" aria-pressed="' + (it.effort === p[0]) + '">' + p[1] + '</button>').join('');
   return '<section class="card ex' + (allDone ? ' is-done' : '') + '">' +
     '<div class="ex-top"><h3><button class="ex-name" data-act="fx-open" data-v="' + esc(it.id) + '">' + thumb(it.id, 'ex-thumb') + '<span>' + esc(it.name) + '</span></button></h3><span class="tag">' + (allDone ? '✓ ' : '') + it.n + ' × ' + range + (isTime ? ' s' : '') + '</span></div>' +
-    (it.note ? '<p class="ex-note">' + esc(it.note) + '</p>' : '') +
+    (it.note ? '<p class="ex-note">' + esc(it.note) + '</p>' : '') + exNotesView(it, i, k, last) +
     '<div class="sug"><span>' + esc(sug.text) + '</span>' + useBtn + '</div>' +
     '<div class="sets' + (showW ? '' : ' nw') + '"><div class="shead" aria-hidden="true"><span>Serie</span><span>Anterior</span>' + (showW ? '<span>Kg</span>' : '') + '<span>' + (isTime ? 'Seg' : 'Reps') + '</span><span>✓</span></div>' + rows + '</div>' +
     '<div class="ex-actions"><button class="btn-soft" data-act="set-add" data-i="' + i + '">+ Añadir serie</button>' + (canDel ? '<button class="btn-text muted" data-act="set-del" data-i="' + i + '">Quitar la última</button>' : '') + '</div>' +
-    '<div class="ex-foot"><div class="chips" role="group" aria-label="Cómo ha ido ' + esc(it.name) + '">' + eff + '</div><button class="btn-text muted" data-act="skip" data-i="' + i + '">Saltar hoy</button></div>' +
+    '<div class="ex-foot"><div class="chips" role="group" aria-label="Cómo ha ido ' + esc(it.name) + '">' + eff + '</div>' +
+      '<div class="ex-tools"><button class="btn-text" data-act="it-notes" data-i="' + i + '" aria-expanded="' + !!it.notesOpen + '">' + (it.notesOpen ? 'Cerrar notas' : 'Notas') + '</button>' +
+      (it.done.some(Boolean) ? '' : '<button class="btn-text" data-act="it-swap" data-i="' + i + '">Cambiar</button>') +
+      '<button class="btn-text muted" data-act="skip" data-i="' + i + '">Saltar hoy</button></div></div>' +
   '</section>';
+}
+
+/* Notas: la fija sale cada vez que toca el ejercicio; la de hoy se guarda con la sesión */
+function exNotesView(it, i, k, last){
+  const fixed = S.exNotes[it.id] || '';
+  let out = fixed ? '<p class="ex-pin">' + ICON.pin + '<span>' + esc(fixed) + '</span></p>' : '';
+  if (last && last.item.note) out += '<p class="ex-last">El ' + esc(fmtDate(last.date)) + ': ' + esc(last.item.note) + '</p>';
+  if (it.notesOpen) {
+    const id = k + '-' + i, fv = it.fixDraft != null ? it.fixDraft : fixed;
+    out += '<div class="ex-notes"><label class="lab" for="dn-' + id + '">Nota de hoy</label>' +
+      '<input type="text" id="dn-' + id + '" data-key="dn-' + id + '" data-act="it-dnote" data-i="' + i + '" value="' + esc(it.dnote || '') + '" placeholder="Cómo le ha ido, si le molestó algo…" autocomplete="off">' +
+      '<label class="lab" for="fn-' + id + '">Nota fija</label>' +
+      '<input type="text" id="fn-' + id + '" data-key="fn-' + id + '" data-act="it-fixnote" data-i="' + i + '" value="' + esc(fv) + '" placeholder="Sale siempre: agujero de la polea, agarre…" autocomplete="off"></div>';
+  } else if (it.dnote) out += '<p class="ex-dnote">Hoy: ' + esc(it.dnote) + '</p>';
+  return out;
+}
+async function saveExNote(id, val){
+  const v = String(val || '').trim();
+  if (v === (S.exNotes[id] || '')) return;
+  const next = clone(S.exNotes); if (v) next[id] = v; else delete next[id];
+  try { await store.saveNotes(next); toast(v ? 'Nota fija guardada' : 'Nota fija borrada'); }
+  catch (e) { toast('No se ha guardado la nota: ' + ((e && e.message) || 'inténtalo de nuevo')); }
+  render();
 }
 
 function viewTrain(){
@@ -1057,7 +1133,7 @@ function viewHistory(){
   const list = sortedDesc().map(s => {
     const r = recs[s.id] || {};
     const dur = s.startedAt && s.endedAt ? Math.round((s.endedAt - s.startedAt) / 60000) : null;
-    const lines = (s.items || []).map(it => '<li><button class="h-link" data-act="fx-open" data-v="' + esc(it.id) + '">' + esc(it.name) + '</button><span class="h-val">' + esc(entryText(it)) + '</span>' + (r[it.id] ? '<span class="rec">Récord de ' + r[it.id] + '</span>' : '') + '</li>').join('');
+    const lines = (s.items || []).map(it => '<li><button class="h-link" data-act="fx-open" data-v="' + esc(it.id) + '">' + esc(it.name) + '</button><span class="h-val">' + esc(entryText(it)) + '</span>' + (it.note ? '<span class="h-note">' + esc(it.note) + '</span>' : '') + (r[it.id] ? '<span class="rec">Récord de ' + r[it.id] + '</span>' : '') + '</li>').join('');
     const del = S.confirmDel === s.id
       ? '<button class="btn-text danger" data-act="del" data-v="' + esc(s.id) + '">Pulsa otra vez para borrar</button>'
       : '<button class="btn-text muted" data-act="del" data-v="' + esc(s.id) + '">Borrar</button>';
@@ -1269,6 +1345,7 @@ async function saveSession(){
     if (!sets.length) continue;
     const ws = sets.map(p => p.w), known = ws.filter(w => w != null);
     const rec = { id:it.id, name:it.name, kind:it.kind, weight: known.length ? Math.max(...known) : null, sets: sets.map(p => p.r), effort: it.effort || null };
+    const dn = String(it.dnote || '').trim(); if (dn) rec.note = dn;
     if (ws.some(w => w !== ws[0])) rec.weights = ws;
     items.push(rec);
   }
@@ -1361,7 +1438,7 @@ async function saveFile(filename, data){
 const backupDue = () => { const lb = LS.get('lastBackup', null); return !lb || lb < addDays(todayISO(), -14); };
 async function backupAction(){
   const body = { app:'diarioEric', version:1, exportedAt: new Date().toISOString(), sessions: S.sessions,
-    config: { templates: S.templates, phasesApplied: S.phasesApplied, prev: S.prevCfg }, tests: S.tests };
+    config: { templates: S.templates, phasesApplied: S.phasesApplied, prev: S.prevCfg }, tests: S.tests, exNotes: S.exNotes };
   try {
     await saveFile('diario-eric-' + todayISO() + '.json', JSON.stringify(body));
     LS.set('lastBackup', todayISO()); toast('Copia descargada'); render();
@@ -1385,6 +1462,7 @@ async function importAction(){
   S.sessions = d.sessions;
   if (c.templates && c.templates.A && c.templates.B) await store.saveConfig({ templates: c.templates, phasesApplied: c.phasesApplied || [], prev: c.prev || null });
   await store.saveTests(d.tests || {});
+  await store.saveNotes(d.exNotes || {});
   S.pendingImport = null; S.edit = null; S.drafts = {}; saveDrafts();
   toast('Copia recuperada'); render();
 }
@@ -1407,17 +1485,17 @@ function buildWorkbook(XLSX){
   let maxSets = 1; for (const s of asc) for (const it of (s.items || [])) maxSets = Math.max(maxSets, (it.sets || []).length);
   const head = ['Fecha', 'Sesión', 'Ejercicio', 'Peso (kg)'];
   for (let i = 1; i <= maxSets; i++) head.push('Serie ' + i);
-  head.push('Peso por serie', 'Total', 'Unidad', 'Esfuerzo', 'Récord', 'Nota de la sesión');
+  head.push('Peso por serie', 'Total', 'Unidad', 'Esfuerzo', 'Récord', 'Nota del ejercicio', 'Nota de la sesión');
   const rows = [head];
   for (const s of asc) for (const it of (s.items || [])) {
     const sets = it.sets || [], r = [excelDate(s.date), s.session, it.name, it.weight == null ? '' : it.weight];
     for (let i = 0; i < maxSets; i++) r.push(sets[i] == null ? '' : sets[i]);
-    r.push(mixedW(it) ? setWeights(it).map(w => w == null ? '-' : fmtNum(w)).join(' / ') : '', sets.reduce((a, b) => a + b, 0), it.kind === 'time' ? 's' : 'reps', EFF[it.effort] || '', recs[s.id] && recs[s.id][it.id] ? 'Récord de ' + recs[s.id][it.id] : '', s.note || '');
+    r.push(mixedW(it) ? setWeights(it).map(w => w == null ? '-' : fmtNum(w)).join(' / ') : '', sets.reduce((a, b) => a + b, 0), it.kind === 'time' ? 's' : 'reps', EFF[it.effort] || '', recs[s.id] && recs[s.id][it.id] ? 'Récord de ' + recs[s.id][it.id] : '', it.note || '', s.note || '');
     rows.push(r);
   }
   const ws1 = XLSX.utils.aoa_to_sheet(rows);
   fmtDates(ws1, rows.slice(1).map((_, i) => ({ r: i + 1, c: 0 })));
-  ws1['!cols'] = head.map((h, i) => ({ wch: i === 0 ? 11 : i === 2 ? 34 : h === 'Nota de la sesión' ? 40 : h === 'Récord' ? 16 : h === 'Peso por serie' ? 14 : 9 }));
+  ws1['!cols'] = head.map((h, i) => ({ wch: i === 0 ? 11 : i === 2 ? 34 : h === 'Nota de la sesión' || h === 'Nota del ejercicio' ? 40 : h === 'Récord' ? 16 : h === 'Peso por serie' ? 14 : 9 }));
   if (rows.length > 1) ws1['!autofilter'] = { ref: XLSX.utils.encode_range({ s:{ r:0, c:0 }, e:{ r: rows.length - 1, c: head.length - 1 } }) };
 
   const sum = [['Ejercicio', 'Sesiones', 'Primera vez', 'Peso inicial (kg)', 'Última vez', 'Peso actual (kg)', 'Mejor serie', 'Unidad', 'Último esfuerzo']];
@@ -1459,8 +1537,8 @@ async function exportXlsx(){
 }
 async function exportCsv(){
   const cell = v => { const s = String(v == null ? '' : v); return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-  const rows = [['fecha', 'sesion', 'ejercicio', 'peso_kg', 'series', 'unidad', 'esfuerzo', 'nota']];
-  for (const s of sortedAsc()) for (const it of (s.items || [])) rows.push([s.date, s.session, it.name, mixedW(it) ? setWeights(it).map(w => w == null ? '-' : fmtNum(w)).join(' / ') : (it.weight == null ? '' : fmtNum(it.weight)), (it.sets || []).map(fmtNum).join(' / '), it.kind === 'time' ? 's' : 'reps', EFF[it.effort] || '', s.note || '']);
+  const rows = [['fecha', 'sesion', 'ejercicio', 'peso_kg', 'series', 'unidad', 'esfuerzo', 'nota_ejercicio', 'nota']];
+  for (const s of sortedAsc()) for (const it of (s.items || [])) rows.push([s.date, s.session, it.name, mixedW(it) ? setWeights(it).map(w => w == null ? '-' : fmtNum(w)).join(' / ') : (it.weight == null ? '' : fmtNum(it.weight)), (it.sets || []).map(fmtNum).join(' / '), it.kind === 'time' ? 's' : 'reps', EFF[it.effort] || '', it.note || '', s.note || '']);
   const csv = '\ufeff' + rows.map(r => r.map(cell).join(';')).join('\r\n');
   try { await saveFile('diario-fuerza-eric.csv', csv); toast('Historial descargado'); }
   catch (e) { if (!(e && e.code === 'declined')) toast('No se ha podido descargar el archivo'); }
@@ -1494,14 +1572,20 @@ function onClick(act, ds){
     case 'pk-m': case 'pk-eq': {
       const p = S.pick, f = act === 'pk-m' ? 'm' : 'eq';
       p[f] = p[f] === ds.v ? null : ds.v; p.q = '';
-      LS.set('pickFilter', { m: p.m, eq: p.eq });
+      if (p.ctx !== 'swap') LS.set('pickFilter', { m: p.m, eq: p.eq });
       render();
       if (act === 'pk-m' && p.m) { const r = document.getElementById('pk-results'); if (r && r.scrollIntoView) r.scrollIntoView({ block:'start', behavior:'smooth' }); }
       break;
     }
     case 'pk-add': addFromLib(ds.v); render(); break;
+    case 'pk-swap': swapItem(ds.v); closeSheet(); render(); break;
+    case 'it-swap': { const it = curItem(ds.i); S.pick = { ctx:'swap', i: Number(ds.i), from: it.id, m:null, eq:null, q:'' }; openSheet(); render(); break; }
+    case 'it-notes': { const it = curItem(ds.i); it.notesOpen = !it.notesOpen; delete it.fixDraft; if (it.notesOpen) S.focusKey = 'dn-' + S.active + '-' + ds.i; saveDrafts(); render(); break; }
     case 'fx-open': S.fx = { id: ds.v }; openSheet(); render(); break;
-    case 'fx-add': addFromLib(ds.v); closeSheet(); render(); break;
+    case 'fx-add':
+      if (S.pick && S.pick.ctx === 'swap') { swapItem(ds.v); closeSheet(); closeSheet(); }
+      else { addFromLib(ds.v); closeSheet(); }
+      render(); break;
     case 'sheet-close': closeSheet(); render(); break;
     case 'clear-free': {
       const d = curDraft();
@@ -1568,6 +1652,9 @@ function onField(act, ds, val){
     case 'setw': curItem(ds.i).setW[Number(ds.s)] = val; saveDraftsSoon(); break;
     case 'date': curDraft().date = val; saveDraftsSoon(); break;
     case 'note': curDraft().note = val; saveDraftsSoon(); break;
+    case 'it-dnote': curItem(ds.i).dnote = val; saveDraftsSoon(); break;
+    case 'it-fixnote': curItem(ds.i).fixDraft = val; break;
+    case 'fx-fixnote': if (S.fx) S.fx.noteDraft = val; break;
     case 'test': testDraft(S.cp).vals[ds.t] = val; break;
     case 'testdate': testDraft(S.cp).date = val; break;
     case 'pk-q': { S.pick.q = val; const r = document.getElementById('pk-results'); if (r) r.innerHTML = pickResults(); break; }
@@ -1597,6 +1684,8 @@ root.addEventListener('change', e => {
   if (!el.dataset) return;
   if (el.dataset.act === 'import-file') { if (el.files && el.files[0]) readImport(el.files[0]); return; }
   // Peso cambiado a mano: se copia a las series siguientes sin hacer
+  if (el.dataset.act === 'it-fixnote') { const it = curItem(el.dataset.i); delete it.fixDraft; saveExNote(it.id, el.value); return; }
+  if (el.dataset.act === 'fx-fixnote') { if (S.fx) { delete S.fx.noteDraft; saveExNote(S.fx.id, el.value); } return; }
   if (el.dataset.act === 'setw') { setSetW(curItem(el.dataset.i), Number(el.dataset.s), el.value); saveDrafts(); render(); return; }
   if (el.tagName === 'SELECT' && el.dataset.act) onField(el.dataset.act, el.dataset, el.value);
 });
