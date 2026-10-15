@@ -1702,7 +1702,12 @@ store.init();
 S.canDownload = true;
 /* PWA: pedir que el navegador no borre los datos y registrar el service worker */
 try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
-if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  navigator.serviceWorker.register('sw.js')
+    .then(() => navigator.serviceWorker.ready)
+    .then(r => { const slow = navigator.connection && navigator.connection.saveData; if (r.active && !slow) r.active.postMessage('precache'); })
+    .catch(() => {});
+}
 })();
 </script>
 </body>

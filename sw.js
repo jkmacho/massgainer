@@ -1,8 +1,25 @@
 // Service worker del diario: funciona sin conexión.
 // Al publicar una versión nueva, subir VERSION para que el móvil la recoja.
-const VERSION = 'v2';
+const VERSION = 'v3';
 const CACHE = 'diario-eric-' + VERSION;
 const SHELL = ['./', 'index.html', 'ejercicios.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png'];
+
+// Fotos de los ejercicios: la lista sale de ejercicios.js (define window.EXLIB)
+self.window = self;
+try { importScripts('ejercicios.js'); } catch (e) {}
+const IMGS = (self.EXLIB || []).flatMap(x => Array.from({ length: x.img || 0 }, (_, i) => 'ex/' + encodeURIComponent(x.id) + '-' + i + '.jpg'));
+
+// Se descargan por detrás, de 6 en 6, cuando la página lo pide; las que ya están no se repiten
+async function precacheImages(){
+  const c = await caches.open(CACHE);
+  for (let i = 0; i < IMGS.length; i += 6) {
+    await Promise.all(IMGS.slice(i, i + 6).map(async u => {
+      if (await c.match(u)) return;
+      try { const r = await fetch(u); if (r.ok) await c.put(u, r); } catch (e) {}
+    }));
+  }
+}
+self.addEventListener('message', e => { if (e.data === 'precache') e.waitUntil(precacheImages()); });
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
