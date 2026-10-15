@@ -931,7 +931,8 @@ function viewFicha(){
     histBox = '<div class="stats"><div class="stat"><b>' + hist.length + '</b><small>' + (hist.length === 1 ? 'vez' : 'veces') + '</small></div>' +
       '<div class="stat"><b class="sm">' + esc(best) + '</b><small>mejor serie</small></div><div class="stat"><b class="sm">' + esc(fmtDate(hist[0].date)) + '</b><small>última vez</small></div></div>' +
       '<ul class="hist-list">' + hist.slice(0, 6).map(h => '<li><span class="h-name">' + esc(fmtLong(h.date)) + '</span><span class="h-val">' + esc(entryText(h.item)) + '</span>' + (h.item.note ? '<span class="h-note">' + esc(h.item.note) + '</span>' : '') + '</li>').join('') + '</ul>' +
-      (hist.length > 6 ? '<p class="small muted">Y ' + (hist.length - 6) + ' más en Historial.</p>' : '');
+      (hist.length > 6 ? '<p class="small muted">Y ' + (hist.length - 6) + ' más en Historial.</p>' : '') +
+      (hist.length > 1 ? '<div><button class="btn-text" data-act="fx-progress" data-v="' + esc(id) + '">Ver la gráfica en Progreso</button></div>' : '');
   } else histBox = '<p class="small muted">Aún no lo ha hecho.</p>';
   let add = '';
   if (S.pick && e) add = pickIds().indexOf(id) >= 0 ? '<p class="small muted center">Ya está en la sesión.</p>'
@@ -1262,7 +1263,7 @@ function viewProgress(){
   const select = '<label class="lab" for="prog-ex">Ejercicio</label><select id="prog-ex" data-act="prog-ex">' + opts.map(o => '<option value="' + esc(o.id) + '"' + (o.id === S.progEx ? ' selected' : '') + '>' + esc(o.name) + ' (' + o.count + ')</option>').join('') + '</select>';
   const recent = pts.slice(-6).reverse().map(p => '<li><span class="h-name">' + esc(fmtDate(p.date)) + '</span><span class="h-val">' + esc(entryText(p.item)) + '</span></li>').join('');
   return header('Progreso') + stats + viewMuscleMap() +
-    '<h2 class="section-title">Por ejercicio</h2><section class="card">' + select + '<p class="big">' + esc(big) + '</p>' +
+    '<h2 class="section-title" id="prog-ex-title">Por ejercicio</h2><section class="card">' + select + '<p class="big">' + esc(big) + '</p>' +
     '<div class="chart-wrap">' + chart(data, unit, 'Evolución de ' + (opt ? opt.name : '')) + '</div><p class="small muted">' + caption + '</p></section>' +
     '<h2 class="section-title">Últimas veces</h2><section class="card"><ul class="hist-list">' + recent + '</ul></section>';
 }
@@ -1643,6 +1644,12 @@ function onClick(act, ds){
       break;
     }
     case 'pk-add': addFromLib(ds.v); render(); break;
+    case 'fx-progress': {
+      while (S.fx || S.pick) closeSheet();
+      S.progEx = ds.v; S.tab = 'progress'; render();
+      const t = document.getElementById('prog-ex-title'); if (t) t.scrollIntoView({ block:'start' });
+      break;
+    }
     case 'map-days': S.mapDays = Number(ds.v); render(); break;
     case 'pk-swap': swapItem(ds.v); closeSheet(); render(); break;
     case 'it-swap': { const it = curItem(ds.i); S.pick = { ctx:'swap', i: Number(ds.i), from: it.id, m:null, eq:null, q:'' }; openSheet(); render(); break; }
