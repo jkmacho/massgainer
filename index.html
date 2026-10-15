@@ -1116,9 +1116,10 @@ async function saveExNote(id, val){
   const v = String(val || '').trim();
   if (v === (S.exNotes[id] || '')) return;
   const next = clone(S.exNotes); if (v) next[id] = v; else delete next[id];
+  // Sin render: se guarda al salir del campo y redibujar ahí se comería el toque que viene detrás.
+  // La tarjeta muestra la nota nueva en el siguiente render.
   try { await store.saveNotes(next); toast(v ? 'Nota fija guardada' : 'Nota fija borrada'); }
   catch (e) { toast('No se ha guardado la nota: ' + ((e && e.message) || 'inténtalo de nuevo')); }
-  render();
 }
 
 function viewTrain(){
