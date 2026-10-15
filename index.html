@@ -298,6 +298,15 @@ body.sheet-open .toast{ bottom:calc(16px + env(safe-area-inset-bottom, 0px)); }
 .pk-add.swap{ font-size:22px; }
 .h-note{ font-size:14px; color:var(--muted); font-style:italic; }
 label.sub{ font-weight:700; }
+.maps.load .body{ max-width:150px; }
+.bm.l1{ fill:var(--accent); fill-opacity:.3; }
+.bm.l2{ fill:var(--accent); fill-opacity:.62; }
+.bm.l3{ fill:var(--accent); }
+.mload{ display:flex; flex-wrap:wrap; gap:4px 14px; font-variant-numeric:tabular-nums; }
+.legend{ display:flex; align-items:center; flex-wrap:wrap; gap:4px; }
+.legend .key{ margin:0 2px 0 8px; }
+.legend .key:first-child{ margin-left:0; }
+.key.l1{ opacity:.3; } .key.l2{ opacity:.62; }
 .h-link{ background:none; border:0; padding:0; text-align:left; font:inherit; font-weight:700; font-size:15px; color:inherit; text-decoration:underline dotted var(--muted); text-underline-offset:4px; }
 @media (max-width:440px){ .fx-muscles{ grid-template-columns:1fr; } }
 @media (prefers-reduced-motion: reduce){ .toast, .rest-fill, .status .bar i{ transition:none; } .restbar.done .rest-count{ animation:none; }
@@ -1188,6 +1197,33 @@ function chart(data, unit, label){
   return '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" width="' + W + '" height="' + H + '" role="img" aria-label="' + esc(label) + '">' + g + area +
     '<path d="' + path + '" class="c-line"/>' + dots + xl + '<text x="' + L + '" y="16" class="c-unit">' + esc(unit) + '</text></svg>';
 }
+/* Series por músculo principal en los últimos días: la figura se colorea en 3 intensidades */
+function muscleLoad(days){
+  const from = addDays(todayISO(), -(days - 1)), load = {};
+  for (const s of S.sessions) {
+    if (s.date < from || s.date > todayISO()) continue;
+    for (const it of (s.items || [])) {
+      const e = LIB.get(it.id), n = (it.sets || []).length;
+      if (e && n) for (const m of e.m) if (m !== 'cardio') load[m] = (load[m] || 0) + n;
+    }
+  }
+  return load;
+}
+function viewMuscleMap(){
+  const days = S.mapDays === 30 ? 30 : 7, load = muscleLoad(days);
+  const t = days === 7 ? [4, 9] : [12, 30];
+  const lvl = m => { const n = load[m] || 0; return !n ? '' : n < t[0] ? 'l1' : n < t[1] ? 'l2' : 'l3'; };
+  const list = Object.keys(load).sort((a, b) => load[b] - load[a]);
+  const pills = [[7, '7 días'], [30, '30 días']].map(p => '<button class="pill sm" data-act="map-days" data-v="' + p[0] + '" aria-pressed="' + (days === p[0]) + '">' + p[1] + '</button>').join('');
+  return '<h2 class="section-title">Músculos trabajados</h2><section class="card">' +
+    '<div class="row between"><span class="small muted">Series por músculo principal</span><div class="chips">' + pills + '</div></div>' +
+    (list.length
+      ? bodyMaps(lvl, false, ' load') +
+        '<p class="small mload">' + list.map(m => '<span><b>' + esc(MNAME[m]) + '</b> ' + load[m] + '</span>').join('') + '</p>' +
+        '<p class="small muted legend"><span class="key l1"></span>Poco <span class="key l2"></span>Bien <span class="key l3"></span>Mucho</p>'
+      : '<p class="small muted">No hay series en los últimos ' + days + ' días.</p>') +
+  '</section>';
+}
 function viewProgress(){
   if (!ready()) return header('Progreso') + '<p class="empty">Cargando…</p>';
   const opts = exerciseOptions().filter(o => o.count > 0);
@@ -1207,8 +1243,8 @@ function viewProgress(){
   const stats = '<div class="stats"><div class="stat"><b>' + total + '</b><small>sesiones en total</small></div><div class="stat"><b>' + month + '</b><small>este mes</small></div><div class="stat"><b>' + st + '</b><small>' + (st === 1 ? 'semana seguida' : 'semanas seguidas') + ' con 2 o más</small></div></div>';
   const select = '<label class="lab" for="prog-ex">Ejercicio</label><select id="prog-ex" data-act="prog-ex">' + opts.map(o => '<option value="' + esc(o.id) + '"' + (o.id === S.progEx ? ' selected' : '') + '>' + esc(o.name) + ' (' + o.count + ')</option>').join('') + '</select>';
   const recent = pts.slice(-6).reverse().map(p => '<li><span class="h-name">' + esc(fmtDate(p.date)) + '</span><span class="h-val">' + esc(entryText(p.item)) + '</span></li>').join('');
-  return header('Progreso') + stats +
-    '<section class="card">' + select + '<p class="big">' + esc(big) + '</p>' +
+  return header('Progreso') + stats + viewMuscleMap() +
+    '<h2 class="section-title">Por ejercicio</h2><section class="card">' + select + '<p class="big">' + esc(big) + '</p>' +
     '<div class="chart-wrap">' + chart(data, unit, 'Evolución de ' + (opt ? opt.name : '')) + '</div><p class="small muted">' + caption + '</p></section>' +
     '<h2 class="section-title">Últimas veces</h2><section class="card"><ul class="hist-list">' + recent + '</ul></section>';
 }
@@ -1578,6 +1614,7 @@ function onClick(act, ds){
       break;
     }
     case 'pk-add': addFromLib(ds.v); render(); break;
+    case 'map-days': S.mapDays = Number(ds.v); render(); break;
     case 'pk-swap': swapItem(ds.v); closeSheet(); render(); break;
     case 'it-swap': { const it = curItem(ds.i); S.pick = { ctx:'swap', i: Number(ds.i), from: it.id, m:null, eq:null, q:'' }; openSheet(); render(); break; }
     case 'it-notes': { const it = curItem(ds.i); it.notesOpen = !it.notesOpen; delete it.fixDraft; if (it.notesOpen) S.focusKey = 'dn-' + S.active + '-' + ds.i; saveDrafts(); render(); break; }
