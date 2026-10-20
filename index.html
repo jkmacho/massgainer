@@ -189,6 +189,13 @@ h1{ font-family:var(--display); font-weight:700; font-size:38px; line-height:1; 
 .trow > span:first-child{ font-size:15px; min-width:0; }
 .tin{ display:flex; align-items:center; gap:6px; flex-shrink:0; }
 .tin input{ width:76px; }
+.tblock{ padding:4px 0 10px; border-bottom:1px solid var(--line); }
+.tblock:last-child{ border-bottom:0; }
+.tblock .trow{ border-bottom:0; }
+.tnote{ width:100%; font-size:14.5px; }
+.tprev{ margin:4px 2px 0; font-size:13px; color:var(--muted); }
+.cmp-notes{ list-style:none; margin:6px 0 0; padding:0; font-size:13px; color:var(--muted); }
+.cmp-notes b{ color:var(--text); font-weight:700; }
 .unit{ color:var(--muted); font-size:14px; min-width:2.2em; }
 .cmp-name{ font-weight:700; font-size:14.5px; }
 .cmp-cells{ display:grid; grid-template-columns:repeat(5, 1fr); gap:6px; margin-top:6px; }
@@ -348,12 +355,12 @@ const CHECKPOINTS = [
   { id:'jun', label:'Jun', when:'Mediados de junio', date:'2027-06-14' }
 ];
 const TESTS = [
-  { id:'flex',    name:'Flexiones en la barra, altura fija', unit:'reps' },
-  { id:'remoinv', name:'Remo invertido en la barra, altura fija', unit:'reps' },
-  { id:'colgado', name:'Colgado de la barra de dominadas', unit:'s' },
-  { id:'plancha', name:'Plancha (tope 2 min)', unit:'s' },
-  { id:'salto',   name:'Salto horizontal, pies juntos (mejor de 3)', unit:'cm' },
-  { id:'goblet',  name:'Sentadilla goblet con 6 kg (tope 20)', unit:'reps' }
+  { id:'flex',    name:'Flexiones en la barra, altura fija', unit:'reps', hint:'Agujero de la barra, pies…' },
+  { id:'remoinv', name:'Remo invertido en la barra, altura fija', unit:'reps', hint:'Agujero de la barra, pies…' },
+  { id:'colgado', name:'Colgado de la barra de dominadas', unit:'s', hint:'Agarre, si soltó una mano…' },
+  { id:'plancha', name:'Plancha (tope 2 min)', unit:'s', hint:'Cómo acabó, si bajó la cadera…' },
+  { id:'salto',   name:'Salto horizontal, pies juntos (mejor de 3)', unit:'cm', hint:'Superficie, calzado…' },
+  { id:'goblet',  name:'Sentadilla goblet con 6 kg (tope 20)', unit:'reps', hint:'Peso usado, profundidad…' }
 ];
 const WORKING = [
   { id:'press_incl', name:'Press inclinado' },
@@ -1276,20 +1283,32 @@ function testDraft(cp){
   if (!S.testDrafts[cp]) {
     const saved = S.tests[cp] || {}, vals = {};
     for (const k of Object.keys(saved.vals || {})) vals[k] = fmtNum(saved.vals[k]);
-    S.testDrafts[cp] = { date: saved.date || todayISO(), vals };
+    S.testDrafts[cp] = { date: saved.date || todayISO(), vals, notes: Object.assign({}, saved.notes) };
   }
   return S.testDrafts[cp];
+}
+// Nota de la prueba anterior, para repetir la misma altura o el mismo peso
+function prevTestNote(cp, tid){
+  const i = CHECKPOINTS.findIndex(c => c.id === cp);
+  for (let j = i - 1; j >= 0; j--) { const t = S.tests[CHECKPOINTS[j].id]; if (t && t.notes && t.notes[tid]) return { cp: CHECKPOINTS[j], text: t.notes[tid] }; }
+  return null;
 }
 function viewTests(){
   if (!ready()) return header('Pruebas') + '<p class="empty">Cargando…</p>';
   if (!S.cp) S.cp = defaultCp();
   const cp = CHECKPOINTS.find(c => c.id === S.cp), dr = testDraft(S.cp);
   const seg = CHECKPOINTS.map(c => '<button class="cp" data-act="cp" data-v="' + c.id + '" aria-pressed="' + (c.id === S.cp) + '"><b>' + c.label + '</b><small>' + (hasTest(c.id) ? '✓ hecha' : '') + '</small></button>').join('');
-  const inputs = TESTS.map(t => '<label class="trow"><span>' + esc(t.name) + '</span><span class="tin"><input type="text" inputmode="numeric" autocomplete="off" id="t-' + S.cp + '-' + t.id + '" data-key="t-' + S.cp + '-' + t.id + '" data-act="test" data-t="' + t.id + '" value="' + esc(dr.vals[t.id] == null ? '' : dr.vals[t.id]) + '" aria-label="' + esc(t.name) + ' en ' + t.unit + '"><span class="unit">' + t.unit + '</span></span></label>').join('');
+  const inputs = TESTS.map(t => {
+    const pn = prevTestNote(S.cp, t.id);
+    return '<div class="tblock"><label class="trow"><span>' + esc(t.name) + '</span><span class="tin"><input type="text" inputmode="numeric" autocomplete="off" id="t-' + S.cp + '-' + t.id + '" data-key="t-' + S.cp + '-' + t.id + '" data-act="test" data-t="' + t.id + '" value="' + esc(dr.vals[t.id] == null ? '' : dr.vals[t.id]) + '" aria-label="' + esc(t.name) + ' en ' + t.unit + '"><span class="unit">' + t.unit + '</span></span></label>' +
+      '<input type="text" class="tnote" autocomplete="off" id="tn-' + S.cp + '-' + t.id + '" data-key="tn-' + S.cp + '-' + t.id + '" data-act="testnote" data-t="' + t.id + '" value="' + esc(dr.notes[t.id] || '') + '" placeholder="Nota: ' + esc(t.hint) + '" aria-label="Nota de ' + esc(t.name) + '">' +
+      (pn ? '<p class="tprev">En ' + esc(pn.cp.label.toLowerCase()) + ': ' + esc(pn.text) + '</p>' : '') + '</div>';
+  }).join('');
+  const noteList = t => { const l = CHECKPOINTS.filter(c => S.tests[c.id] && S.tests[c.id].notes && S.tests[c.id].notes[t.id]).map(c => '<li><b>' + c.label + ':</b> ' + esc(S.tests[c.id].notes[t.id]) + '</li>'); return l.length ? '<ul class="cmp-notes">' + l.join('') + '</ul>' : ''; };
   const cells = get => { let prev = null; return CHECKPOINTS.map(c => { const v = get(c); const up = v != null && prev != null && v > prev; if (v != null) prev = v; return '<span class="cell-cmp' + (up ? ' up' : '') + '"><small>' + c.label + '</small><b>' + (v == null ? '—' : fmtNum(v)) + '</b></span>'; }).join(''); };
-  const cmpTests = TESTS.map(t => '<div><span class="cmp-name">' + esc(t.name) + ' (' + t.unit + ')</span><div class="cmp-cells">' + cells(c => S.tests[c.id] && S.tests[c.id].vals && S.tests[c.id].vals[t.id] != null ? S.tests[c.id].vals[t.id] : null) + '</div></div>').join('');
+  const cmpTests = TESTS.map(t => '<div><span class="cmp-name">' + esc(t.name) + ' (' + t.unit + ')</span><div class="cmp-cells">' + cells(c => S.tests[c.id] && S.tests[c.id].vals && S.tests[c.id].vals[t.id] != null ? S.tests[c.id].vals[t.id] : null) + '</div>' + noteList(t) + '</div>').join('');
   const cmpW = WORKING.map(w => '<div><span class="cmp-name">' + esc(w.name) + ', peso de trabajo (kg)</span><div class="cmp-cells">' + cells(c => S.tests[c.id] && S.tests[c.id].pesos && S.tests[c.id].pesos[w.id] != null ? S.tests[c.id].pesos[w.id] : null) + '</div></div>').join('');
-  return header('Pruebas', esc(cp.when) + '. Sustituyen a una sesión normal: después del calentamiento, siempre en el mismo orden y con la barra en el mismo agujero. Cada prueba se para en cuanto la técnica falla.') +
+  return header('Pruebas', esc(cp.when) + '. Sustituyen a una sesión normal: después del calentamiento, siempre en el mismo orden y con la barra en el mismo agujero (apúntalo en la nota de cada prueba). Cada prueba se para en cuanto la técnica falla.') +
     '<div class="cps" role="group" aria-label="Semana de pruebas">' + seg + '</div>' +
     '<section class="card"><label class="lab" for="t-date">Fecha</label><input id="t-date" type="date" data-key="tdate-' + S.cp + '" data-act="testdate" value="' + esc(dr.date) + '"><div>' + inputs + '</div></section>' +
     '<button class="btn-primary" data-act="test-save">Guardar pruebas de ' + cp.label.toLowerCase() + '</button>' +
@@ -1441,9 +1460,11 @@ async function saveTestsAction(){
   const cp = S.cp, dr = testDraft(cp), vals = {};
   for (const t of TESTS) { const v = num(dr.vals[t.id]); if (v != null) vals[t.id] = v; }
   if (!Object.keys(vals).length) { toast('Apunta al menos una prueba'); return; }
+  const notes = {};
+  for (const t of TESTS) { const n = String(dr.notes[t.id] || '').trim(); if (n) notes[t.id] = n; }
   const pesos = {};
   for (const w of WORKING) { const l = lastEntry(w.id); if (l && l.item.weight != null) pesos[w.id] = l.item.weight; }
-  const next = clone(S.tests); next[cp] = { date: dr.date || todayISO(), vals, pesos };
+  const next = clone(S.tests); next[cp] = { date: dr.date || todayISO(), vals, notes, pesos };
   try {
     await store.saveTests(next); delete S.testDrafts[cp];
     toast('Pruebas de ' + CHECKPOINTS.find(c => c.id === cp).label.toLowerCase() + ' guardadas');
@@ -1578,7 +1599,10 @@ function buildWorkbook(XLSX){
 
   const tv = (c, f) => { const t = S.tests[c.id]; const v = t ? f(t) : null; return v == null ? '' : v; };
   const tp = [['Prueba'].concat(CHECKPOINTS.map(c => c.label)), ['Fecha'].concat(CHECKPOINTS.map(c => tv(c, t => t.date ? excelDate(t.date) : null)))];
-  for (const t of TESTS) tp.push([t.name + ' (' + t.unit + ')'].concat(CHECKPOINTS.map(c => tv(c, x => x.vals ? x.vals[t.id] : null))));
+  for (const t of TESTS) {
+    tp.push([t.name + ' (' + t.unit + ')'].concat(CHECKPOINTS.map(c => tv(c, x => x.vals ? x.vals[t.id] : null))));
+    if (CHECKPOINTS.some(c => S.tests[c.id] && S.tests[c.id].notes && S.tests[c.id].notes[t.id])) tp.push(['  Nota'].concat(CHECKPOINTS.map(c => tv(c, x => x.notes ? x.notes[t.id] : null))));
+  }
   for (const w of WORKING) tp.push([w.name + ', peso de trabajo (kg)'].concat(CHECKPOINTS.map(c => tv(c, x => x.pesos ? x.pesos[w.id] : null))));
   const ws3 = XLSX.utils.aoa_to_sheet(tp);
   fmtDates(ws3, CHECKPOINTS.map((_, i) => ({ r: 1, c: i + 1 })));
@@ -1737,6 +1761,7 @@ function onField(act, ds, val){
     case 'it-fixnote': curItem(ds.i).fixDraft = val; break;
     case 'fx-fixnote': if (S.fx) S.fx.noteDraft = val; break;
     case 'test': testDraft(S.cp).vals[ds.t] = val; break;
+    case 'testnote': testDraft(S.cp).notes[ds.t] = val; break;
     case 'testdate': testDraft(S.cp).date = val; break;
     case 'pk-q': { S.pick.q = val; const r = document.getElementById('pk-results'); if (r) r.innerHTML = pickResults(); break; }
     case 'prog-ex': S.progEx = val; render(); break;

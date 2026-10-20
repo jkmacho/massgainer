@@ -5,7 +5,7 @@ Diario de fuerza: PWA sin dependencias para apuntar los entrenamientos. Funciona
 - **Entrenar**: sesiones A, B y Libre con tabla de series, sugerencia de peso, temporizador de descanso (general o propio de cada ejercicio) y notas: una fija por ejercicio que sale siempre y otra del día que queda en el historial.
 - **Añadir y cambiar ejercicios**: selector a pantalla completa con figura del cuerpo (delante y detrás), filtros por músculo y material y buscador. "Cambiar" propone ejercicios parecidos del mismo músculo, solo para ese día.
 - **Ficha de cada ejercicio**: fotos animadas, músculos marcados en la figura, cómo se hace, nota fija e historial con la mejor serie.
-- **Historial**, **Progreso** (gráfica por ejercicio y mapa de músculos trabajados en 7 o 30 días), **Pruebas** físicas y **Plan** por fases, con exportación a Excel/CSV y copia de seguridad.
+- **Historial**, **Progreso** (gráfica por ejercicio y mapa de músculos trabajados en 7 o 30 días), **Pruebas** físicas (con nota en cada una para la altura de la barra o el peso usado) y **Plan** por fases, con exportación a Excel/CSV y copia de seguridad.
 
 ## Biblioteca de ejercicios
 `ejercicios.js` tiene los ejercicios que se pueden hacer con el material de casa (mancuernas, kettlebell, polea, barra y peso corporal), con músculos, técnica en español y fotos en `ex/`. El service worker descarga todas las fotos por detrás para que se vean sin conexión.
