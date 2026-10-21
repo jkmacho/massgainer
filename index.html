@@ -1381,6 +1381,8 @@ function viewBackup(){
   return '<h2 class="section-title">Copia de seguridad</h2><section class="card">' +
     '<p class="small">Todo se guarda en este móvil. La copia es un fichero que puedes guardar en Drive o mandarte por correo, para recuperar los datos si cambias de móvil o se borra el navegador.</p>' +
     '<p class="small muted">' + (lb ? 'Última copia: ' + esc(fmtLong(lb)) + '.' : 'Aún no has hecho ninguna copia.') + '</p>' +
+    (store.mode === 'local' ? '<div class="row"><button class="pill" data-act="auto-backup" aria-pressed="' + autoBackupOn() + '">Copia automática</button></div>' +
+      '<p class="small muted">' + (autoBackupOn() ? 'Al guardar cada sesión o prueba se descarga una copia en la carpeta Descargas del móvil. De vez en cuando, súbela a Drive: si se pierde el móvil, se pierde también Descargas.' : 'Desactivada: solo se hace copia cuando pulsas Hacer copia.') + '</p>' : '') +
     '<div class="row"><button class="btn-soft" data-act="backup">Hacer copia</button><button class="btn-soft" data-act="import">Recuperar copia</button>' +
     '<input type="file" id="import-file" accept=".json,application/json" data-act="import-file" hidden></div>' + confirm + '</section>';
 }
@@ -1444,7 +1446,8 @@ async function saveSession(){
     S.active = null; S.tab = 'history'; S.confirmDiscard = false; stopRest();
     const after = computeRecords();
     let n = 0; for (const id of Object.keys(after)) if (!before[id]) n += Object.keys(after[id]).length;
-    toast(n ? 'Sesión guardada. ¡' + n + (n === 1 ? ' récord' : ' récords') + ' hoy!' : 'Sesión guardada');
+    const copied = await autoBackup();
+    toast((n ? 'Sesión guardada. ¡' + n + (n === 1 ? ' récord' : ' récords') + ' hoy!' : 'Sesión guardada') + (copied ? ' Copia en Descargas.' : ''));
     window.scrollTo(0, 0);
   } catch (e) {
     toast('No se ha guardado: ' + ((e && e.message) || 'inténtalo de nuevo'));
@@ -1467,7 +1470,8 @@ async function saveTestsAction(){
   const next = clone(S.tests); next[cp] = { date: dr.date || todayISO(), vals, notes, pesos };
   try {
     await store.saveTests(next); delete S.testDrafts[cp];
-    toast('Pruebas de ' + CHECKPOINTS.find(c => c.id === cp).label.toLowerCase() + ' guardadas');
+    const copied = await autoBackup();
+    toast('Pruebas de ' + CHECKPOINTS.find(c => c.id === cp).label.toLowerCase() + ' guardadas' + (copied ? '. Copia en Descargas.' : ''));
   } catch (e) { toast('No se han guardado: ' + ((e && e.message) || 'inténtalo de nuevo')); }
   render();
 }
@@ -1526,11 +1530,20 @@ async function saveFile(filename, data){
   setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 const backupDue = () => { const lb = LS.get('lastBackup', null); return !lb || lb < addDays(todayISO(), -14); };
-async function backupAction(){
-  const body = { app:'diarioEric', version:1, exportedAt: new Date().toISOString(), sessions: S.sessions,
-    config: { templates: S.templates, phasesApplied: S.phasesApplied, prev: S.prevCfg }, tests: S.tests, exNotes: S.exNotes };
+const backupBody = () => ({ app:'diarioEric', version:1, exportedAt: new Date().toISOString(), sessions: S.sessions,
+  config: { templates: S.templates, phasesApplied: S.phasesApplied, prev: S.prevCfg }, tests: S.tests, exNotes: S.exNotes });
+const autoBackupOn = () => store.mode === 'local' && LS.get('autoBackup', true) !== false;
+/* Copia automática al guardar: va a Descargas sin preguntar. Devuelve true si se ha hecho */
+async function autoBackup(){
+  if (!autoBackupOn()) return false;
   try {
-    await saveFile('diario-eric-' + todayISO() + '.json', JSON.stringify(body));
+    await saveFile('diario-eric-' + todayISO() + '.json', JSON.stringify(backupBody()));
+    LS.set('lastBackup', todayISO()); return true;
+  } catch (e) { return false; }
+}
+async function backupAction(){
+  try {
+    await saveFile('diario-eric-' + todayISO() + '.json', JSON.stringify(backupBody()));
     LS.set('lastBackup', todayISO()); toast('Copia descargada'); render();
   } catch (e) { if (!(e && e.code === 'declined')) toast('No se ha podido hacer la copia'); }
 }
@@ -1741,6 +1754,7 @@ function onClick(act, ds){
       else S.confirmReset = true;
       render(); break;
     case 'backup': backupAction(); break;
+    case 'auto-backup': LS.set('autoBackup', !autoBackupOn()); render(); break;
     case 'import': { const f = document.getElementById('import-file'); if (f) { f.value = ''; f.click(); } break; }
     case 'import-ok': importAction(); break;
     case 'import-cancel': S.pendingImport = null; render(); break;
