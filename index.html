@@ -1384,7 +1384,7 @@ function viewBackup(){
     (store.mode === 'local' ? '<div class="row"><button class="pill" data-act="auto-backup" aria-pressed="' + autoBackupOn() + '">Copia automática</button></div>' +
       '<p class="small muted">' + (autoBackupOn() ? 'Al guardar cada sesión o prueba se descarga una copia en la carpeta Descargas del móvil. Sirve si se borra el navegador, pero no si se pierde el móvil: para eso está Drive.' : 'Desactivada: solo se hace copia con el botón de abajo.') + '</p>' : '') +
     '<div class="row"><button class="btn-soft" data-act="backup">' + (share ? 'Subir copia' : 'Hacer copia') + '</button><button class="btn-soft" data-act="import">Recuperar copia</button>' +
-    '<input type="file" id="import-file" accept=".json,application/json" data-act="import-file" hidden></div>' + confirm + '</section>';
+    '<input type="file" id="import-file" accept=".json,.txt,application/json,text/plain" data-act="import-file" hidden></div>' + confirm + '</section>';
 }
 
 const TABS = [['train', 'Entrenar'], ['history', 'Historial'], ['progress', 'Progreso'], ['tests', 'Pruebas'], ['plan', 'Plan']];
@@ -1531,7 +1531,15 @@ async function saveFile(filename, data){
 }
 /* lastShare: última copia que ha salido del móvil (Drive, correo…). La automática no cuenta */
 const backupDue = () => { const ls = LS.get('lastShare', null); return !ls || ls < addDays(todayISO(), -30); };
-const canShareFiles = () => { try { return !!(navigator.canShare && navigator.canShare({ files:[new File(['{}'], 'x.json', { type:'application/json' })] })); } catch (e) { return false; } };
+/* Chrome en Android no deja compartir .json: se prueba con .json y, si no, con .txt (mismo contenido) */
+const shareFile = (json, base) => {
+  for (const [ext, type] of [['json', 'application/json'], ['txt', 'text/plain']]) {
+    const f = new File([json], base + '.' + ext, { type });
+    try { if (navigator.canShare && navigator.canShare({ files:[f] })) return f; } catch (e) {}
+  }
+  return null;
+};
+const canShareFiles = () => !!shareFile('{}', 'x');
 const backupBody = () => ({ app:'diarioEric', version:1, exportedAt: new Date().toISOString(), sessions: S.sessions,
   config: { templates: S.templates, phasesApplied: S.phasesApplied, prev: S.prevCfg }, tests: S.tests, exNotes: S.exNotes });
 const autoBackupOn = () => store.mode === 'local' && LS.get('autoBackup', true) !== false;
@@ -1545,17 +1553,18 @@ async function autoBackup(){
 }
 /* Hacer copia: abre Compartir (para mandarla a Drive) y, si el móvil no puede, la descarga */
 async function backupAction(){
-  const name = 'diario-eric-' + todayISO() + '.json', json = JSON.stringify(backupBody());
-  if (store.mode === 'local' && canShareFiles()) {
+  const base = 'diario-eric-' + todayISO(), json = JSON.stringify(backupBody());
+  const file = store.mode === 'local' ? shareFile(json, base) : null;
+  if (file) {
     try {
       // Sin await antes: share() necesita el toque del botón todavía reciente
-      await navigator.share({ files:[new File([json], name, { type:'application/json' })], title:'Copia del diario' });
+      await navigator.share({ files:[file], title:'Copia del diario' });
       LS.set('lastShare', todayISO()); LS.set('lastBackup', todayISO()); toast('Copia enviada'); render();
     } catch (e) { if (!(e && e.name === 'AbortError')) toast('No se ha podido compartir la copia'); }
     return;
   }
   try {
-    await saveFile(name, json);
+    await saveFile(base + '.json', json);
     // Hecha a mano para sacarla del móvil: cuenta como subida
     LS.set('lastShare', todayISO()); LS.set('lastBackup', todayISO()); toast('Copia descargada'); render();
   } catch (e) { if (!(e && e.code === 'declined')) toast('No se ha podido hacer la copia'); }
