@@ -537,7 +537,8 @@ const S = {
   loaded:{ sessions:false, cfg:false }, drafts:{}, active:null, saving:false,
   confirmDel:null, progEx:null, cp:null, testDrafts:{}, edit:null, confirmReset:false,
   restSec: [60, 90, 120].indexOf(LS.get('restSec', 90)) >= 0 ? LS.get('restSec', 90) : 90,
-  exNotes:{}, toast:'', dbError:'', canDownload:false, exporting:false, focusKey:null, phasesApplied:[], prevCfg:null, confirmPhase:null
+  exNotes:{}, toast:'', dbError:'', canDownload:false, exporting:false, focusKey:null, phasesApplied:[], prevCfg:null, confirmPhase:null,
+  gear:{}, gearDraft:{}
 };
 (function restoreDrafts(){
   const d = LS.get('drafts', {}); const t = todayISO();
@@ -555,7 +556,7 @@ const store = {
       this.mode = 'db';
       const base = 'data/users/' + uid;
       const cfg = db.doc(base + '/config');
-      this.refs = { cfg, sessions: cfg.collection('sessions'), tests: db.doc(base + '/tests'), notes: db.doc(base + '/notes') };
+      this.refs = { cfg, sessions: cfg.collection('sessions'), tests: db.doc(base + '/tests'), notes: db.doc(base + '/notes'), gear: db.doc(base + '/gear') };
       this.refs.sessions.onSnapshot(snap => {
         S.sessions = snap.docs.map(d => Object.assign({ id: d.id }, clone(d.data() || {})));
         S.loaded.sessions = true; render();
@@ -577,6 +578,11 @@ const store = {
         S.tests = d && d.values ? clone(d.values) : {};
         render();
       }, err => dbFail(err));
+      this.refs.gear.onSnapshot(snap => {
+        const d = snap.exists ? snap.data() : null;
+        S.gear = d && d.values ? clone(d.values) : {};
+        render();
+      }, err => dbFail(err));
       setTimeout(() => { if (!S.loaded.sessions || !S.loaded.cfg) { S.loaded.sessions = S.loaded.cfg = true; S.dbError = 'Los datos tardan en cargar. Revisa la conexión y vuelve a abrir el diario.'; render(); } }, 12000);
     } else {
       this.mode = 'local';
@@ -586,6 +592,7 @@ const store = {
       else { const t = LS.get('templates', null); if (t && t.A && t.B) S.templates = t; }
       S.tests = LS.get('tests', {});
       S.exNotes = LS.get('exNotes', {}) || {};
+      S.gear = LS.get('gear', {}) || {};
       S.loaded.sessions = S.loaded.cfg = true;
       render();
     }
@@ -615,6 +622,11 @@ const store = {
     if (this.mode === 'db') { await this.retry(() => this.refs.notes.set({ values, updatedAt: Date.now() })); }
     else { if (!LS.set('exNotes', values)) throw { message:'no hay espacio en este navegador' }; }
     S.exNotes = clone(values);
+  },
+  async saveGear(values){
+    if (this.mode === 'db') { await this.retry(() => this.refs.gear.set({ values, updatedAt: Date.now() })); }
+    else { if (!LS.set('gear', values)) throw { message:'no hay espacio en este navegador' }; }
+    S.gear = clone(values);
   },
   async saveTests(values){
     if (this.mode === 'db') { await this.retry(() => this.refs.tests.set({ values, updatedAt: Date.now() })); }
@@ -689,6 +701,26 @@ function entryText(it){
   const e = it.effort ? ' (' + EFF[it.effort] + ')' : '';
   return w + (it.sets || []).map(fmtNum).join(', ') + u + e;
 }
+/* ---------- Material de casa: pesos que existen de verdad ---------- */
+const GEAR = [['mancuernas', 'Mancuernas', 'kg de cada mancuerna'], ['kettlebell', 'Kettlebell', 'kg de cada kettlebell'], ['polea', 'Polea', 'kg que se pueden poner']];
+const eqOf = id => (LIB.get(id) || {}).eq || null;
+const gearList = eq => (Array.isArray(S.gear[eq]) ? S.gear[eq] : []);
+/* "1 2 2,5 3" o "2; 4; 6" o "2,4,6". La coma sola es decimal ("2,5") */
+function parseGear(txt){
+  const out = [];
+  for (const tok of String(txt || '').split(/[\s;]+/)) {
+    if (!tok) continue;
+    const parts = (tok.match(/,/g) || []).length > 1 ? tok.split(',') : [tok];
+    for (const p of parts) { const n = num(p.replace(/kg$/i, '')); if (n != null && n > 0 && n <= 200) out.push(Math.round(n * 10) / 10); }
+  }
+  return Array.from(new Set(out)).sort((a, b) => a - b);
+}
+const gearText = l => l.map(fmtNum).join('  ');
+/* Siguiente peso para subir: el menor de la lista por encima de w. undefined si no hay lista; null si ya está en el máximo */
+function nextGear(id, w){
+  const l = gearList(eqOf(id)); if (!l.length) return undefined;
+  const up = l.filter(g => g > w); return up.length ? up[0] : null;
+}
 function suggest(it, last){
   const u = it.kind === 'time' ? 's' : 'reps';
   if (!last) {
@@ -707,7 +739,12 @@ function suggest(it, last){
   const allTop = sets.length >= it.n && sets.every(v => v >= it.max);
   const eff = L.effort || 'justo', step = Number(it.step) || 0;
   if (allTop && eff !== 'duro') {
-    if (w && w > 0 && step > 0) { const nw = Math.round((w + step) * 10) / 10; return { text:'Sube a ' + fmtW(nw), weight:nw }; }
+    if (w && w > 0 && step > 0) {
+      const g = nextGear(it.id, w);
+      if (g === null) return { text:'Ya está en el peso más alto que tenéis: suma reps o pasa a una versión más difícil', weight:w };
+      const nw = g !== undefined ? g : Math.round((w + step) * 10) / 10;
+      return { text:'Sube a ' + fmtW(nw), weight:nw };
+    }
     if (it.id === 'flex_barra' || it.id === 'remo_inv') return { text:'Baja la barra un agujero', weight:null };
     if (it.id === 'bajadas') return { text:'Prueba su primera dominada', weight:null };
     if (it.kind === 'time') return { text:'Intenta ' + (it.max + 5) + ' s o más', weight:null };
@@ -1371,6 +1408,7 @@ function viewPlan(){
       '<li>Cuando haga todas las series en el máximo del rango y diga <strong>fácil</strong> o <strong>justo</strong>, el diario propone el siguiente peso.</li>' +
       '<li>Si dice <strong>duro</strong>, se repite el peso hasta que salga justo. Ninguna serie al fallo.</li>' +
       '<li>Dolor en una articulación no es cansancio: ese ejercicio se para ese día.</li></ul></section>' +
+    viewGear() +
     viewBackup() +
     '<h2 class="section-title">Ejercicios de cada sesión</h2>' +
     '<p class="small muted">Para ajustes a mano. Si cambias un ejercicio por otro distinto, añade uno nuevo en vez de renombrarlo, para que la gráfica no los mezcle.</p>' +
@@ -1378,6 +1416,22 @@ function viewPlan(){
     '<section class="card">' + (rows || '<p class="small muted">Sin ejercicios.</p>') + '<button class="btn-soft" data-act="pk-open" data-v="plan">+ Añadir ejercicio</button></section>' +
     '<button class="btn-primary" data-act="e-save"' + (ed.dirty ? '' : ' disabled') + '>' + (ed.dirty ? 'Guardar cambios' : 'Sin cambios') + '</button>' +
     '<button class="btn-text ' + (S.confirmReset ? 'danger' : 'muted') + '" data-act="e-reset">' + (S.confirmReset ? 'Pulsa otra vez para volver al plan inicial' : 'Volver al plan inicial') + '</button>';
+}
+function viewGear(){
+  const rows = GEAR.map(g => {
+    const l = gearList(g[0]), dr = S.gearDraft[g[0]];
+    return '<label>' + g[1] + ' <span class="muted">(' + g[2] + ')</span><input type="text" inputmode="decimal" placeholder="Ej.: 1 2 3 4 5" data-key="gear-' + g[0] + '" data-act="gear" data-v="' + g[0] + '" value="' + esc(dr != null ? dr : gearText(l)) + '"></label>';
+  }).join('');
+  return '<h2 class="section-title">Material de casa</h2><section class="card">' +
+    '<p class="small">Apunta los pesos que tenéis, separados por espacios (2,5 con coma). Al subir de peso, el diario solo propondrá pesos de esta lista.</p>' + rows +
+    '<p class="small muted">Si una lista está vacía, sube con el salto de peso de cada ejercicio, como hasta ahora.</p></section>';
+}
+async function saveGearAction(eq, txt){
+  const next = clone(S.gear), l = parseGear(txt);
+  if (l.length) next[eq] = l; else delete next[eq];
+  try { await store.saveGear(next); delete S.gearDraft[eq]; toast(l.length ? 'Material guardado' : 'Lista vacía: se usa el salto de peso'); }
+  catch (e) { toast('No se ha guardado: ' + ((e && e.message) || 'inténtalo de nuevo')); }
+  render();
 }
 function viewBackup(){
   const lb = LS.get('lastBackup', null), ls = LS.get('lastShare', null), pi = S.pendingImport, share = store.mode === 'local' && canShareFiles();
@@ -1546,7 +1600,7 @@ const shareFile = (json, base) => {
 };
 const canShareFiles = () => !!shareFile('{}', 'x');
 const backupBody = () => ({ app:'diarioEric', version:1, exportedAt: new Date().toISOString(), sessions: S.sessions,
-  config: { templates: S.templates, phasesApplied: S.phasesApplied, prev: S.prevCfg }, tests: S.tests, exNotes: S.exNotes });
+  config: { templates: S.templates, phasesApplied: S.phasesApplied, prev: S.prevCfg }, tests: S.tests, exNotes: S.exNotes, gear: S.gear });
 const autoBackupOn = () => store.mode === 'local' && LS.get('autoBackup', true) !== false;
 /* Copia automática al guardar: va a Descargas sin preguntar. Devuelve true si se ha hecho */
 async function autoBackup(){
@@ -1593,6 +1647,7 @@ async function importAction(){
   if (c.templates && c.templates.A && c.templates.B) await store.saveConfig({ templates: c.templates, phasesApplied: c.phasesApplied || [], prev: c.prev || null });
   await store.saveTests(d.tests || {});
   await store.saveNotes(d.exNotes || {});
+  if (d.gear) await store.saveGear(d.gear);
   S.pendingImport = null; S.edit = null; S.drafts = {}; saveDrafts();
   toast('Copia recuperada'); render();
 }
@@ -1804,6 +1859,7 @@ function onField(act, ds, val){
     case 'test': testDraft(S.cp).vals[ds.t] = val; break;
     case 'testnote': testDraft(S.cp).notes[ds.t] = val; break;
     case 'testdate': testDraft(S.cp).date = val; break;
+    case 'gear': S.gearDraft[ds.v] = val; break;
     case 'pk-q': { S.pick.q = val; const r = document.getElementById('pk-results'); if (r) r.innerHTML = pickResults(); break; }
     case 'prog-ex': S.progEx = val; render(); break;
     case 'e-name': case 'e-sets': case 'e-min': case 'e-max': case 'e-step': case 'e-note': case 'e-kind': case 'e-rest': {
@@ -1838,6 +1894,7 @@ root.addEventListener('change', e => {
   // Peso cambiado a mano: se copia a las series siguientes sin hacer
   if (el.dataset.act === 'it-fixnote') { const it = curItem(el.dataset.i); delete it.fixDraft; saveExNote(it.id, el.value); return; }
   if (el.dataset.act === 'fx-fixnote') { if (S.fx) { delete S.fx.noteDraft; saveExNote(S.fx.id, el.value); } return; }
+  if (el.dataset.act === 'gear') { saveGearAction(el.dataset.v, el.value); return; }
   if (el.dataset.act === 'setw') { setSetW(curItem(el.dataset.i), Number(el.dataset.s), el.value); saveDrafts(); render(); return; }
   if (el.tagName === 'SELECT' && el.dataset.act) onField(el.dataset.act, el.dataset, el.value);
 });

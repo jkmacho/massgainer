@@ -1,6 +1,6 @@
 // Service worker del diario: funciona sin conexión.
 // Al publicar una versión nueva, subir VERSION para que el móvil la recoja.
-const VERSION = 'v5';
+const VERSION = 'v6';
 const CACHE = 'diario-eric-' + VERSION;
 const SHELL = ['./', 'index.html', 'ejercicios.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png'];
 
