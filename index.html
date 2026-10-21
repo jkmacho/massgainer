@@ -84,6 +84,11 @@ h1{ font-family:var(--display); font-weight:700; font-size:38px; line-height:1; 
 .btn-primary[disabled]{ opacity:.55; cursor:default; }
 .btn-soft{ min-height:44px; border:1.5px solid var(--line); border-radius:12px; background:var(--surface-2); padding:8px 14px; font-weight:700; }
 .btn-outline{ min-height:40px; border:1.5px solid var(--accent); border-radius:10px; background:transparent; color:var(--accent); padding:6px 12px; font-weight:700; font-size:15px; white-space:nowrap; }
+.switch{ display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; min-height:48px; padding:6px 0; background:none; border:0; color:var(--text); font-weight:700; text-align:left; }
+.switch .track{ flex:none; position:relative; width:48px; height:28px; border-radius:14px; background:var(--line); transition:background .15s; }
+.switch .track::after{ content:''; position:absolute; top:3px; left:3px; width:22px; height:22px; border-radius:50%; background:var(--surface); box-shadow:0 1px 2px rgba(0,0,0,.3); transition:transform .15s; }
+.switch[aria-checked="true"] .track{ background:var(--accent); }
+.switch[aria-checked="true"] .track::after{ transform:translateX(20px); }
 .btn-text{ background:none; border:0; padding:8px 2px; min-height:40px; color:var(--accent); font-weight:700; font-size:15px; }
 .btn-text.muted{ color:var(--muted); font-weight:400; }
 .btn-text.danger{ color:var(--danger); }
@@ -1381,7 +1386,7 @@ function viewBackup(){
   return '<h2 class="section-title">Copia de seguridad</h2><section class="card">' +
     '<p class="small">Todo se guarda en este móvil. La copia es un fichero para recuperar los datos si cambias de móvil o se borra el navegador. Una vez al mes, súbela a Drive con <strong>' + (share ? 'Subir copia' : 'Hacer copia') + '</strong>.</p>' +
     '<p class="small muted">' + (lb ? 'Última copia: ' + esc(fmtLong(lb)) + '.' : 'Aún no has hecho ninguna copia.') + (store.mode === 'local' ? ' ' + (ls ? 'Última subida a Drive: ' + esc(fmtLong(ls)) + '.' : 'Aún no se ha subido ninguna a Drive.') : '') + '</p>' +
-    (store.mode === 'local' ? '<div class="row"><button class="pill" data-act="auto-backup" aria-pressed="' + autoBackupOn() + '">Copia automática</button></div>' +
+    (store.mode === 'local' ? '<button class="switch" role="switch" data-act="auto-backup" aria-checked="' + autoBackupOn() + '"><span>Copia automática: ' + (autoBackupOn() ? 'activada' : 'desactivada') + '</span><span class="track" aria-hidden="true"></span></button>' +
       '<p class="small muted">' + (autoBackupOn() ? 'Al guardar cada sesión o prueba se descarga una copia en la carpeta Descargas del móvil. Sirve si se borra el navegador, pero no si se pierde el móvil: para eso está Drive.' : 'Desactivada: solo se hace copia con el botón de abajo.') + '</p>' : '') +
     '<div class="row"><button class="btn-soft" data-act="backup">' + (share ? 'Subir copia' : 'Hacer copia') + '</button><button class="btn-soft" data-act="import">Recuperar copia</button>' +
     '<input type="file" id="import-file" accept=".json,.txt,application/json,text/plain" data-act="import-file" hidden></div>' + confirm + '</section>';
