@@ -580,7 +580,7 @@ const store = {
       }, err => dbFail(err));
       this.refs.gear.onSnapshot(snap => {
         const d = snap.exists ? snap.data() : null;
-        S.gear = d && d.values ? clone(d.values) : {};
+        S.gear = d && d.values ? clone(d.values) : clone(DEFAULT_GEAR);
         render();
       }, err => dbFail(err));
       setTimeout(() => { if (!S.loaded.sessions || !S.loaded.cfg) { S.loaded.sessions = S.loaded.cfg = true; S.dbError = 'Los datos tardan en cargar. Revisa la conexión y vuelve a abrir el diario.'; render(); } }, 12000);
@@ -592,7 +592,7 @@ const store = {
       else { const t = LS.get('templates', null); if (t && t.A && t.B) S.templates = t; }
       S.tests = LS.get('tests', {});
       S.exNotes = LS.get('exNotes', {}) || {};
-      S.gear = LS.get('gear', {}) || {};
+      S.gear = LS.get('gear', null) || clone(DEFAULT_GEAR);
       S.loaded.sessions = S.loaded.cfg = true;
       render();
     }
@@ -702,6 +702,8 @@ function entryText(it){
   return w + (it.sets || []).map(fmtNum).join(', ') + u + e;
 }
 /* ---------- Material de casa: pesos que existen de verdad ---------- */
+/* Mancuernas de casa: barra de 2 kg + discos de 1 y 2 kg, iguales a cada lado: 2, 4, 6 u 8 kg con las dos */
+const DEFAULT_GEAR = { mancuernas:[2, 4, 6, 8] };
 const GEAR = [['mancuernas', 'Mancuernas', 'kg de cada mancuerna'], ['kettlebell', 'Kettlebell', 'kg de cada kettlebell'], ['polea', 'Polea', 'kg que se pueden poner']];
 const eqOf = id => (LIB.get(id) || {}).eq || null;
 const gearList = eq => (Array.isArray(S.gear[eq]) ? S.gear[eq] : []);
