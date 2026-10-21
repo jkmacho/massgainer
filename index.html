@@ -514,7 +514,7 @@ const DAYS = ['domingo','lunes','martes','miércoles','jueves','viernes','sábad
 const fmtDate = s => { const d = parseISO(s); return d.getDate() + ' ' + MONTHS[d.getMonth()]; };
 const fmtLong = s => { const d = parseISO(s); return DAYS[d.getDay()] + ' ' + d.getDate() + ' ' + MONTHS[d.getMonth()]; };
 const num = v => { if (v === '' || v == null) return null; const n = parseFloat(String(v).replace(',', '.')); return isFinite(n) ? n : null; };
-const fmtNum = n => String(Math.round(Number(n) * 10) / 10).replace('.', ',');
+const fmtNum = n => String(Math.round(Number(n) * 100) / 100).replace('.', ',');
 const fmtW = w => w == null ? 'sin peso' : (w === 0 ? 'peso corporal' : fmtNum(w) + ' kg');
 const clampInt = (v, lo, hi, def) => { const x = num(v); if (x == null) return def; const n = Math.round(x); return Math.min(hi, Math.max(lo, n)); };
 const newId = () => (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ('id' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8));
@@ -702,26 +702,39 @@ function entryText(it){
   return w + (it.sets || []).map(fmtNum).join(', ') + u + e;
 }
 /* ---------- Material de casa: pesos que existen de verdad ---------- */
-/* Material de casa. Mancuernas: barra de 2 kg + discos de 1 y 2 kg, iguales a cada lado (2, 4, 6 u 8 kg con las dos). Una kettlebell de 5 kg */
-const DEFAULT_GEAR = { mancuernas:[2, 4, 6, 8], kettlebell:[5] };
-const GEAR = [['mancuernas', 'Mancuernas', 'kg de cada mancuerna'], ['kettlebell', 'Kettlebell', 'kg de cada kettlebell'], ['polea', 'Polea', 'kg que se pueden poner']];
+/* Material de casa. Mancuernas: barra de 2 kg + discos de 1 y 2 kg, iguales a cada lado (2, 4, 6 u 8 kg con las dos).
+   Una kettlebell de 5 kg. Polea: se carga con discos, uno de cada */
+const DEFAULT_GEAR = { mancuernas:[2, 4, 6, 8], kettlebell:[5], polea:[0.5, 1.25, 2.5, 5, 10, 15, 20] };
+/* [material, nombre, ayuda, discos]. Con discos se apuntan los discos y los pesos posibles son sus sumas */
+const GEAR = [['mancuernas', 'Mancuernas', 'kg de cada mancuerna'], ['kettlebell', 'Kettlebell', 'kg de cada kettlebell'],
+  ['polea', 'Polea', 'discos que tenéis', true]];
+const isDiscs = eq => !!(GEAR.find(g => g[0] === eq) || [])[3];
+function discSums(discs){
+  let sums = new Set([0]);
+  for (const d of discs) { const next = new Set(sums); for (const x of sums) { const v = Math.round((x + d) * 100) / 100; if (v <= 200) next.add(v); } sums = next; }
+  sums.delete(0); return Array.from(sums).sort((a, b) => a - b);
+}
 const eqOf = id => (LIB.get(id) || {}).eq || null;
-const gearList = eq => (Array.isArray(S.gear[eq]) ? S.gear[eq] : []);
+const gearRaw = eq => (Array.isArray(S.gear[eq]) ? S.gear[eq] : []);
+const gearList = eq => isDiscs(eq) ? discSums(gearRaw(eq)) : gearRaw(eq);
 /* "1 2 2,5 3" o "2; 4; 6" o "2,4,6". La coma sola es decimal ("2,5") */
-function parseGear(txt){
+function parseGear(txt, keepDup){
   const out = [];
   for (const tok of String(txt || '').split(/[\s;]+/)) {
     if (!tok) continue;
     const parts = (tok.match(/,/g) || []).length > 1 ? tok.split(',') : [tok];
-    for (const p of parts) { const n = num(p.replace(/kg$/i, '')); if (n != null && n > 0 && n <= 200) out.push(Math.round(n * 10) / 10); }
+    for (const p of parts) { const n = num(p.replace(/kg$/i, '')); if (n != null && n > 0 && n <= 200) out.push(Math.round(n * 100) / 100); }
   }
-  return Array.from(new Set(out)).sort((a, b) => a - b);
+  return (keepDup ? out : Array.from(new Set(out))).sort((a, b) => a - b);
 }
 const gearText = l => l.map(fmtNum).join('  ');
-/* Siguiente peso para subir: el menor de la lista por encima de w. undefined si no hay lista; null si ya está en el máximo */
-function nextGear(id, w){
+/* Siguiente peso para subir: el menor de la lista que suba al menos el salto del ejercicio (o el más alto que haya).
+   undefined si no hay lista; null si ya está en el máximo */
+function nextGear(id, w, step){
   const l = gearList(eqOf(id)); if (!l.length) return undefined;
-  const up = l.filter(g => g > w); return up.length ? up[0] : null;
+  const up = l.filter(g => g > w + 1e-9); if (!up.length) return null;
+  const ok = up.find(g => g >= w + (step || 0) - 1e-9);
+  return ok !== undefined ? ok : up[up.length - 1];
 }
 function suggest(it, last){
   const u = it.kind === 'time' ? 's' : 'reps';
@@ -742,7 +755,7 @@ function suggest(it, last){
   const eff = L.effort || 'justo', step = Number(it.step) || 0;
   if (allTop && eff !== 'duro') {
     if (w && w > 0 && step > 0) {
-      const g = nextGear(it.id, w);
+      const g = nextGear(it.id, w, step);
       if (g === null) return { text:'Ya está en el peso más alto que tenéis: suma reps o pasa a una versión más difícil', weight:w };
       const nw = g !== undefined ? g : Math.round((w + step) * 10) / 10;
       return { text:'Sube a ' + fmtW(nw), weight:nw };
@@ -1421,15 +1434,17 @@ function viewPlan(){
 }
 function viewGear(){
   const rows = GEAR.map(g => {
-    const l = gearList(g[0]), dr = S.gearDraft[g[0]];
-    return '<label>' + g[1] + ' <span class="muted">(' + g[2] + ')</span><input type="text" inputmode="decimal" placeholder="Ej.: 1 2 3 4 5" data-key="gear-' + g[0] + '" data-act="gear" data-v="' + g[0] + '" value="' + esc(dr != null ? dr : gearText(l)) + '"></label>';
+    const l = gearRaw(g[0]), dr = S.gearDraft[g[0]];
+    const sums = g[3] && l.length ? gearList(g[0]) : [], low = sums.filter(x => x <= 10);
+    return '<label>' + g[1] + ' <span class="muted">(' + g[2] + ')</span><input type="text" inputmode="decimal" placeholder="Ej.: 1 2 3 4 5" style="display:block;width:100%;margin-top:4px" data-key="gear-' + g[0] + '" data-act="gear" data-v="' + g[0] + '" value="' + esc(dr != null ? dr : gearText(l)) + '"></label>' +
+      (g[3] ? '<p class="small muted">Si hay dos discos iguales, escríbelo dos veces.' + (sums.length ? ' Se pueden poner ' + sums.length + ' pesos distintos. Hasta 10 kg: ' + esc(low.map(fmtNum).join(', ')) + ' kg.' : '') + '</p>' : '');
   }).join('');
   return '<h2 class="section-title">Material de casa</h2><section class="card">' +
-    '<p class="small">Apunta los pesos que tenéis, separados por espacios (2,5 con coma). Al subir de peso, el diario solo propondrá pesos de esta lista.</p>' + rows +
+    '<p class="small">Apunta los pesos que tenéis, separados por espacios (2,5 con coma). Al subir de peso, el diario solo propondrá pesos que se puedan montar.</p>' + rows +
     '<p class="small muted">Si una lista está vacía, sube con el salto de peso de cada ejercicio, como hasta ahora.</p></section>';
 }
 async function saveGearAction(eq, txt){
-  const next = clone(S.gear), l = parseGear(txt);
+  const next = clone(S.gear), l = parseGear(txt, isDiscs(eq));
   if (l.length) next[eq] = l; else delete next[eq];
   try { await store.saveGear(next); delete S.gearDraft[eq]; toast(l.length ? 'Material guardado' : 'Lista vacía: se usa el salto de peso'); }
   catch (e) { toast('No se ha guardado: ' + ((e && e.message) || 'inténtalo de nuevo')); }
