@@ -702,8 +702,8 @@ function entryText(it){
   return w + (it.sets || []).map(fmtNum).join(', ') + u + e;
 }
 /* ---------- Material de casa: pesos que existen de verdad ---------- */
-/* Mancuernas de casa: barra de 2 kg + discos de 1 y 2 kg, iguales a cada lado: 2, 4, 6 u 8 kg con las dos */
-const DEFAULT_GEAR = { mancuernas:[2, 4, 6, 8] };
+/* Material de casa. Mancuernas: barra de 2 kg + discos de 1 y 2 kg, iguales a cada lado (2, 4, 6 u 8 kg con las dos). Una kettlebell de 5 kg */
+const DEFAULT_GEAR = { mancuernas:[2, 4, 6, 8], kettlebell:[5] };
 const GEAR = [['mancuernas', 'Mancuernas', 'kg de cada mancuerna'], ['kettlebell', 'Kettlebell', 'kg de cada kettlebell'], ['polea', 'Polea', 'kg que se pueden poner']];
 const eqOf = id => (LIB.get(id) || {}).eq || null;
 const gearList = eq => (Array.isArray(S.gear[eq]) ? S.gear[eq] : []);
