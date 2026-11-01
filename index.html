@@ -135,6 +135,11 @@ h1{ font-family:var(--display); font-weight:700; font-size:38px; line-height:1; 
 .sets{ display:grid; gap:6px; }
 .srow, .shead{ display:grid; grid-template-columns:28px minmax(0, 1fr) 64px 64px 46px; gap:6px; align-items:center; }
 .sets.nw .srow, .sets.nw .shead{ grid-template-columns:28px minmax(0, 1fr) 76px 46px; }
+.sets.tm .srow, .sets.tm .shead{ grid-template-columns:28px minmax(0, 1fr) 64px 44px 46px; }
+.sets.tm.nw .srow, .sets.tm.nw .shead{ grid-template-columns:28px minmax(0, 1fr) 76px 44px 46px; }
+.go{ width:44px; height:44px; border-radius:10px; border:1.5px solid var(--accent); background:var(--surface-2); color:var(--accent); display:grid; place-items:center; }
+.go svg{ width:20px; height:20px; }
+.go:disabled{ visibility:hidden; }
 .shead span{ font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); text-align:center; }
 .shead span:first-child{ text-align:left; }
 .srow{ border-radius:10px; padding:2px 0; }
@@ -333,6 +338,9 @@ label.sub{ font-weight:700; }
 @media (max-width:360px){
   .srow, .shead{ grid-template-columns:24px minmax(0, 1fr) 56px 56px 44px; gap:4px; }
   .sets.nw .srow, .sets.nw .shead{ grid-template-columns:24px minmax(0, 1fr) 68px 44px; }
+  .sets.tm .srow, .sets.tm .shead{ grid-template-columns:24px minmax(0, 1fr) 56px 40px 44px; }
+  .sets.tm.nw .srow, .sets.tm.nw .shead{ grid-template-columns:24px minmax(0, 1fr) 68px 40px 44px; }
+  .go{ width:40px; }
   .cell{ font-size:20px; }
   h1{ font-size:32px; }
 }
@@ -779,6 +787,7 @@ const ICON = {
   progress: svg('<path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 6-7"/>'),
   tests: svg('<circle cx="12" cy="13.5" r="7.5"/><path d="M12 10v3.5l2.5 2M9.5 2.5h5"/>'),
   plan: svg('<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 3h6v3H9zM9 11h6M9 15h4"/>'),
+  play: svg('<path d="M8 5.5v13l11-6.5z" fill="currentColor"/>'),
   check: svg('<path d="M5 12.5l4.5 4.5L19 7.5"/>', ' stroke-width="2.6"'),
   clock: svg('<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9.5 2.5h5"/>'),
   pin: svg('<path d="M12 16v6M9 3h6l-1 6 3 3v2H7v-2l3-3z"/>')
@@ -1053,10 +1062,10 @@ const timerLeft = () => Math.max(0, Math.ceil((timerEnd - Date.now()) / 1000));
 function unlockAudio(){
   try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); if (audioCtx.state === 'suspended') audioCtx.resume(); } catch (e) {}
 }
-function beep(){
+function beep(ts = [0, 0.35, 0.7]){
   try {
     unlockAudio();
-    [0, 0.35, 0.7].forEach(t => {
+    ts.forEach(t => {
       const o = audioCtx.createOscillator(), g = audioCtx.createGain(), at = audioCtx.currentTime + t;
       o.frequency.value = 880; o.connect(g); g.connect(audioCtx.destination);
       g.gain.setValueAtTime(0.0001, at); g.gain.exponentialRampToValueAtTime(0.4, at + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, at + 0.25);
@@ -1073,10 +1082,21 @@ async function keepAwake(on){
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && timerId) keepAwake(true); });
 function paintRest(){
   const bar = document.getElementById('restbar');
-  document.body.classList.toggle('resting', !!timerEnd);
+  document.body.classList.toggle('resting', !!timerEnd || !!work);
   if (!bar) return;
-  bar.hidden = !timerEnd;
-  if (!timerEnd) return;
+  bar.hidden = !timerEnd && !work;
+  if (bar.hidden) return;
+  document.getElementById('rest-btns').hidden = !!work;
+  document.getElementById('work-btns').hidden = !work;
+  if (work) {
+    const prep = work.phase === 'prep', now = Date.now();
+    const left = Math.max(0, Math.ceil(((prep ? work.prepEnd : work.end) - now) / 1000));
+    bar.classList.remove('done');
+    document.getElementById('rest-count').textContent = clockText(left * 1000);
+    document.getElementById('rest-lab').textContent = prep ? 'Prepárate · ' + work.name : work.name + ' · serie ' + (work.s + 1);
+    document.getElementById('rest-fill').style.width = (prep ? 100 : Math.min(100, left / work.target * 100)) + '%';
+    return;
+  }
   const left = timerLeft(), done = left === 0;
   bar.classList.toggle('done', done);
   document.getElementById('rest-count').textContent = done ? '¡Siguiente serie!' : clockText(left * 1000);
@@ -1093,6 +1113,7 @@ function tick(){
   }
 }
 function startRest(sec){
+  cancelWork();
   timerTotal = sec; timerEnd = Date.now() + sec * 1000;
   clearInterval(timerId); timerId = setInterval(tick, 250);
   unlockAudio(); keepAwake(true); tick();
@@ -1101,11 +1122,58 @@ function adjustRest(sec){
   if (!timerId) { startRest(Math.max(15, sec)); return; }
   timerEnd += sec * 1000; timerTotal = Math.max(timerTotal + sec, timerLeft(), 1); tick();
 }
-function stopRest(){ clearInterval(timerId); timerId = null; timerEnd = 0; keepAwake(false); paintRest(); }
+function stopRest(){ clearInterval(timerId); timerId = null; timerEnd = 0; cancelWork(); keepAwake(false); paintRest(); }
+
+/* Tiempo efectivo (planchas…): 5 s para colocarse, cuenta atrás del objetivo y, al acabar, marca la serie y empieza el descanso */
+let work = null, workId = null;
+const WORK_PREP = 5;
+function startWork(i, s){
+  const d = curDraft(), it = d.items[Number(i)], n = Number(s);
+  if (!it || it.done[n]) return;
+  const p = prevSet(lastEntry(it.id), n), typed = num(it.reps[n]);
+  const target = typed > 0 ? typed : Math.round(p ? p.r : it.min);
+  if (!(target > 0)) return;
+  stopRest(); cancelWork();
+  work = { key:S.active, i:Number(i), s:n, target, name:it.name, phase:'prep', prepEnd:Date.now() + WORK_PREP * 1000, end:0 };
+  workId = setInterval(workTick, 250);
+  unlockAudio(); keepAwake(true); paintRest();
+}
+function cancelWork(){
+  if (!work) return;
+  clearInterval(workId); workId = null; work = null; keepAwake(false); paintRest();
+}
+function workTick(){
+  if (!work) return;
+  const now = Date.now();
+  if (work.phase === 'prep' && now >= work.prepEnd) {
+    work.phase = 'go'; work.end = now + work.target * 1000;
+    beep([0]); try { if (navigator.vibrate) navigator.vibrate(200); } catch (e) {}
+  } else if (work.phase === 'go' && now >= work.end) {
+    try { if (navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 300]); } catch (e) {}
+    beep(); finishWork(work.target); return;
+  }
+  paintRest();
+}
+/* Guarda los segundos hechos en la serie, la marca y arranca el descanso */
+function finishWork(sec){
+  const w = work; if (!w) return;
+  clearInterval(workId); workId = null; work = null;
+  const d = S.drafts[w.key], it = d && d.items[w.i]; if (!it) { paintRest(); return; }
+  it.reps[w.s] = String(Math.max(1, Math.round(sec)));
+  if (it.done[w.s]) { saveDrafts(); render(); return; }
+  S.active = w.key; markDone(w.i, w.s);
+}
+/* Parar antes de tiempo: se guardan los segundos que de verdad aguantó */
+function stopWork(){
+  if (!work) return;
+  if (work.phase === 'prep') { cancelWork(); return; }
+  beep([0]);
+  finishWork(work.target - (work.end - Date.now()) / 1000);
+}
 function viewRest(){
   return '<div id="restbar" class="restbar" hidden role="timer" aria-live="polite"><div id="rest-fill" class="rest-fill"></div><div class="rest-in">' +
     '<div class="rest-txt"><span id="rest-lab" class="lab">Descanso</span><span id="rest-count" class="rest-count"></span></div>' +
-    '<div class="rest-btns"><button data-act="rest-adj" data-v="-15" aria-label="Quitar 15 segundos">−15</button><button data-act="rest-adj" data-v="15" aria-label="Añadir 15 segundos">+15</button><button data-act="rest-skip">Saltar</button></div>' +
+    '<div id="rest-btns" class="rest-btns"><button data-act="rest-adj" data-v="-15" aria-label="Quitar 15 segundos">−15</button><button data-act="rest-adj" data-v="15" aria-label="Añadir 15 segundos">+15</button><button data-act="rest-skip">Saltar</button></div><div id="work-btns" class="rest-btns" hidden><button data-act="work-stop">Parar</button><button data-act="work-cancel">Cancelar</button></div>' +
   '</div></div>';
 }
 
@@ -1145,6 +1213,7 @@ function viewEx(it, i, k){
       (p ? '<button class="prev" data-act="prev" data-i="' + i + '" data-s="' + s + '" aria-label="Copiar la última vez: ' + esc(pTxt) + '">' + esc(pTxt) + '</button>' : '<span class="prev none" aria-hidden="true">—</span>') +
       (showW ? '<input class="cell" type="text" inputmode="decimal" autocomplete="off" id="w-' + id + '" data-key="w-' + id + '" data-act="setw" data-i="' + i + '" data-s="' + s + '" value="' + esc(it.setW[s]) + '" placeholder="kg" aria-label="Kg de la serie ' + (s + 1) + '">' : '') +
       '<input class="cell" type="text" inputmode="numeric" autocomplete="off" id="r-' + id + '" data-key="r-' + id + '" data-act="rep" data-i="' + i + '" data-s="' + s + '" value="' + esc(v) + '" placeholder="' + esc(ghost) + '" aria-label="' + (isTime ? 'Segundos' : 'Repeticiones') + ' de la serie ' + (s + 1) + '">' +
+      (isTime ? '<button class="go" data-act="work-start" data-i="' + i + '" data-s="' + s + '" aria-label="Empezar cuenta atrás de la serie ' + (s + 1) + '"' + (it.done[s] ? ' disabled' : '') + '>' + ICON.play + '</button>' : '') +
       '<button class="check" data-act="done" data-i="' + i + '" data-s="' + s + '" aria-pressed="' + !!it.done[s] + '" aria-label="Serie ' + (s + 1) + ' hecha">' + ICON.check + '</button></div>';
   }).join('');
   const canDel = it.reps.length > 1 && !it.done[it.reps.length - 1];
@@ -1154,7 +1223,7 @@ function viewEx(it, i, k){
     (it.note ? '<p class="ex-note">' + esc(it.note) + '</p>' : '') +
     (it.rest && it.rest !== S.restSec ? '<p class="ex-rest">' + ICON.clock + 'Descanso ' + restLabel(it.rest) + '</p>' : '') + exNotesView(it, i, k, last) +
     '<div class="sug"><span>' + esc(sug.text) + '</span>' + useBtn + '</div>' +
-    '<div class="sets' + (showW ? '' : ' nw') + '"><div class="shead" aria-hidden="true"><span>Serie</span><span>Anterior</span>' + (showW ? '<span>Kg</span>' : '') + '<span>' + (isTime ? 'Seg' : 'Reps') + '</span><span>✓</span></div>' + rows + '</div>' +
+    '<div class="sets' + (showW ? '' : ' nw') + (isTime ? ' tm' : '') + '"><div class="shead" aria-hidden="true"><span>Serie</span><span>Anterior</span>' + (showW ? '<span>Kg</span>' : '') + '<span>' + (isTime ? 'Seg' : 'Reps') + '</span>' + (isTime ? '<span></span>' : '') + '<span>✓</span></div>' + rows + '</div>' +
     '<div class="ex-actions"><button class="btn-soft" data-act="set-add" data-i="' + i + '">+ Añadir serie</button>' + (canDel ? '<button class="btn-text muted" data-act="set-del" data-i="' + i + '">Quitar la última</button>' : '') + '</div>' +
     '<div class="ex-foot"><div class="chips" role="group" aria-label="Cómo ha ido ' + esc(it.name) + '">' + eff + '</div>' +
       '<div class="ex-tools"><button class="btn-text" data-act="it-notes" data-i="' + i + '" aria-expanded="' + !!it.notesOpen + '">' + (it.notesOpen ? 'Cerrar notas' : 'Notas') + '</button>' +
@@ -1801,6 +1870,9 @@ function onClick(act, ds){
     case 'preset': S.restSec = Number(ds.v); LS.set('restSec', S.restSec); render(); break;
     case 'rest-adj': adjustRest(Number(ds.v)); break;
     case 'rest-skip': stopRest(); break;
+    case 'work-start': startWork(ds.i, ds.s); break;
+    case 'work-stop': stopWork(); break;
+    case 'work-cancel': cancelWork(); break;
     case 'save': if (!S.saving) saveSession(); break;
     case 'discard':
       if (S.confirmDiscard) { S.confirmDiscard = false; S.drafts[S.active] = buildDraft(S.active); saveDrafts(); stopRest(); toast('Sesión descartada'); }
