@@ -69,7 +69,14 @@ body.resting .app{ padding-bottom:calc(var(--nav-h) + var(--rest-h) + 28px + env
 .eyebrow{ font-size:12.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--accent); }
 .eyebrow .who{ font-size:12.5px; letter-spacing:0; text-transform:none; min-height:0; padding:0 0 0 6px; }
 .sess.who-pick{ min-height:96px; }
-.who-pick .sess-k{ width:auto; font-size:44px; }
+.avatar{ width:72px; height:72px; flex:none; border-radius:50%; object-fit:cover; background:var(--accent-soft); color:var(--accent); display:inline-flex; align-items:center; justify-content:center; font-family:var(--display); font-weight:700; font-size:34px; line-height:1; }
+.avatar.md{ width:56px; height:56px; font-size:28px; }
+.avatar.sm{ width:22px; height:22px; font-size:13px; vertical-align:-6px; }
+.fi-list{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:4px; }
+.fi-row{ display:flex; align-items:center; gap:10px; }
+.fi-row span{ color:var(--muted); font-size:14px; min-width:96px; }
+.fi-row b{ flex:1; font-variant-numeric:tabular-nums; }
+.fi-row .btn-text{ min-height:32px; padding:0; }
 .who-pick .sess-t b{ font-size:20px; }
 h1{ font-family:var(--display); font-weight:700; font-size:38px; line-height:1; letter-spacing:.005em; text-transform:uppercase; }
 .meta{ color:var(--muted); font-size:14.5px; }
@@ -577,7 +584,7 @@ const S = {
   confirmDel:null, progEx:null, cp:null, testDrafts:{}, edit:null, confirmReset:false,
   restSec: [60, 90, 120].indexOf(LS.get('restSec', 90)) >= 0 ? LS.get('restSec', 90) : 90,
   exNotes:{}, toast:'', dbError:'', canDownload:false, exporting:false, focusKey:null, phasesApplied:[], prevCfg:null, confirmPhase:null,
-  gear:{}, gearDraft:{}
+  gear:{}, gearDraft:{}, ficha:{ photo:null, medidas:[] }
 };
 function restoreDrafts(){
   const d = LS.get('drafts', {}); const t = todayISO();
@@ -595,7 +602,8 @@ const store = {
       this.mode = 'db';
       const base = 'data/users/' + uid, sfx = isEric() ? '' : '_' + PROFILE;
       const cfg = db.doc(base + '/config' + sfx);
-      this.refs = { cfg, sessions: cfg.collection('sessions'), tests: db.doc(base + '/tests' + sfx), notes: db.doc(base + '/notes' + sfx), gear: db.doc(base + '/gear') };
+      this.refs = { cfg, sessions: cfg.collection('sessions'), tests: db.doc(base + '/tests' + sfx), notes: db.doc(base + '/notes' + sfx), gear: db.doc(base + '/gear'), ficha: db.doc(base + '/ficha' + sfx) };
+      this.refs.ficha.onSnapshot(snap => { const d = snap.exists ? snap.data() : null; S.ficha = normFicha(d && d.values); render(); }, err => dbFail(err));
       this.refs.sessions.onSnapshot(snap => {
         S.sessions = snap.docs.map(d => Object.assign({ id: d.id }, clone(d.data() || {})));
         S.loaded.sessions = true; render();
@@ -635,6 +643,7 @@ const store = {
       S.tests = LS.get('tests', {});
       S.exNotes = LS.get('exNotes', {}) || {};
       S.gear = LS.get('gear', null) || clone(DEFAULT_GEAR);
+      S.ficha = normFicha(LS.get('ficha', null));
       S.loaded.sessions = S.loaded.cfg = true;
       render();
     }
@@ -664,6 +673,11 @@ const store = {
     if (this.mode === 'db') { await this.retry(() => this.refs.notes.set({ values, updatedAt: Date.now() })); }
     else { if (!LS.set('exNotes', values)) throw { message:'no hay espacio en este navegador' }; }
     S.exNotes = clone(values);
+  },
+  async saveFicha(values){
+    if (this.mode === 'db') { await this.retry(() => this.refs.ficha.set({ values, updatedAt: Date.now() })); }
+    else { if (!LS.set('ficha', values)) throw { message:'no hay espacio en este navegador' }; }
+    S.ficha = normFicha(clone(values));
   },
   async saveGear(values){
     if (this.mode === 'db') { await this.retry(() => this.refs.gear.set({ values, updatedAt: Date.now() })); }
@@ -1276,7 +1290,7 @@ function viewRest(){
 /* ---------- Vistas ---------- */
 function header(title, meta){
   const t = todayISO(), ph = isEric() ? phaseFor(t) : null;
-  const eyebrow = esc(profileName()) + (isEric() ? ' · ' + (ph ? (ph.summer ? 'Verano' : 'Fase ' + ph.n + ' · ' + esc(ph.name)) + ' · hasta el ' + fmtDate(ph.end) : '') : '') +
+  const eyebrow = avatar(S.ficha.photo, profileName()[0], 'sm') + ' ' + esc(profileName()) + (isEric() ? ' · ' + (ph ? (ph.summer ? 'Verano' : 'Fase ' + ph.n + ' · ' + esc(ph.name)) + ' · hasta el ' + fmtDate(ph.end) : '') : '') +
     ' <button class="btn-text who" data-act="profile-change">Cambiar</button>';
   let notice = '';
   if (S.dbError) notice = '<p class="notice warn">' + esc(S.dbError) + '</p>';
@@ -1596,7 +1610,8 @@ function viewRM(){
       '<div class="row"><input type="text" inputmode="decimal" style="flex:1;min-width:0" placeholder="RM real en kg" aria-label="RM real de ' + esc(name) + ' en kg" data-key="rm-' + esc(id) + '" id="rm-' + esc(id) + '"><button class="btn-soft" data-act="rm-save" data-v="' + esc(id) + '">Apuntar</button></div>' +
     '</section>';
   };
-  return header('RM', 'El 1RM estimado sale de tus series de hasta ' + RM_MAXREPS + ' reps (fórmula de Epley). Es orientativo: para un RM real, calienta bien, usa los topes de la jaula y que alguien te ayude.') +
+  return header('RM', 'El 1RM estimado sale de las series de hasta ' + RM_MAXREPS + ' reps (fórmula de Epley). Es orientativo.' +
+      (isEric() ? ' Mientras crece, mejor quedarse con el estimado y no probar máximos reales.' : ' Para un RM real, calienta bien, usa los topes de la jaula y que alguien te ayude.')) +
     (plan ? '<h2 class="section-title">Ejercicios del plan</h2>' : '') + order.slice(0, plan).map(card).join('') +
     (order.length > plan ? '<h2 class="section-title">Otros ejercicios</h2>' + order.slice(plan).map(card).join('') : '');
 }
@@ -1607,6 +1622,75 @@ async function saveRmAction(id){
   try { await store.saveTests(next); toast('RM de ' + fmtNum(w) + ' kg apuntado'); }
   catch (e) { toast('No se ha guardado: ' + ((e && e.message) || 'inténtalo de nuevo')); }
   render();
+}
+
+/* ---------- Ficha de cada perfil: foto, altura y peso ---------- */
+function normFicha(f){
+  f = f && typeof f === 'object' ? f : {};
+  const med = Array.isArray(f.medidas) ? f.medidas.filter(m => m && m.date) : [];
+  return { photo: typeof f.photo === 'string' && f.photo.startsWith('data:image/') ? f.photo : null, medidas: med.sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0) };
+}
+/* Foto de otro perfil (para la pantalla de elegir): se lee directamente del navegador */
+function photoOf(id){
+  try { const f = JSON.parse(localStorage.getItem('diarioEric:' + (id === 'eric' ? '' : id + ':') + 'ficha') || 'null'); return normFicha(f).photo; } catch (e) { return null; }
+}
+const avatar = (photo, letter, cls) => photo ? '<img class="avatar ' + (cls || '') + '" src="' + photo + '" alt="">' : '<span class="avatar ' + (cls || '') + '" aria-hidden="true">' + esc(letter) + '</span>';
+/* Reduce la foto a 256 × 256 (recorte cuadrado del centro) en JPEG */
+function readPhoto(file){
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => {
+      const n = 256, c = document.createElement('canvas'); c.width = c.height = n;
+      const side = Math.min(img.width, img.height), sx = (img.width - side) / 2, sy = (img.height - side) / 2;
+      c.getContext('2d').drawImage(img, sx, sy, side, side, 0, 0, n, n);
+      URL.revokeObjectURL(url); res(c.toDataURL('image/jpeg', 0.82));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('imagen')); };
+    img.src = url;
+  });
+}
+async function savePhotoAction(file){
+  try { const photo = await readPhoto(file); await store.saveFicha(Object.assign({}, S.ficha, { photo })); toast('Foto guardada'); }
+  catch (e) { toast('No se ha podido usar esa foto'); }
+  render();
+}
+async function addMedidaAction(){
+  const g = id => (document.getElementById(id) || {}).value;
+  const date = g('fi-date') || todayISO(), h = num(g('fi-h')), w = num(g('fi-w'));
+  if (h == null && w == null) { toast('Escribe la altura, el peso o los dos'); return; }
+  if ((h != null && (h < 50 || h > 250)) || (w != null && (w < 10 || w > 300))) { toast('Revisa los números: altura en cm y peso en kg'); return; }
+  const m = { date }; if (h != null) m.h = h; if (w != null) m.w = w;
+  const medidas = S.ficha.medidas.filter(x => x.date !== date).concat([m]);
+  try { await store.saveFicha(Object.assign({}, S.ficha, { medidas })); toast('Medida apuntada'); }
+  catch (e) { toast('No se ha guardado: ' + ((e && e.message) || 'inténtalo de nuevo')); }
+  render();
+}
+async function delMedidaAction(date){
+  try { await store.saveFicha(Object.assign({}, S.ficha, { medidas: S.ficha.medidas.filter(x => x.date !== date) })); } catch (e) {}
+  render();
+}
+function viewPerfil(){
+  const f = S.ficha, name = profileName(), med = f.medidas.slice().reverse();
+  const lastOf = k => med.find(x => x[k] != null) || null;
+  const lh = lastOf('h'), lw = lastOf('w');
+  const series = k => f.medidas.filter(x => x[k] != null).map(x => ({ date: x.date, y: x[k], label: fmtNum(x[k]) }));
+  const hs = series('h'), wsr = series('w');
+  const rows = med.slice(0, 6).map(m => '<li class="fi-row"><span>' + esc(fmtDate(m.date)) + ' ' + m.date.slice(0, 4) + '</span><b>' +
+    esc([m.h != null ? fmtNum(m.h) + ' cm' : '', m.w != null ? fmtNum(m.w) + ' kg' : ''].filter(Boolean).join(' · ')) + '</b><button class="btn-text muted" data-act="fi-del" data-v="' + esc(m.date) + '">Quitar</button></li>').join('');
+  return '<h2 class="section-title">Ficha de ' + esc(name) + '</h2><section class="card">' +
+    '<div class="row">' + avatar(f.photo, name[0]) + '<div style="display:flex;flex-direction:column;gap:2px;min-width:0"><b>' + esc(name) + '</b>' +
+      '<span class="small muted">' + esc([lh ? fmtNum(lh.h) + ' cm' : '', lw ? fmtNum(lw.w) + ' kg' : ''].filter(Boolean).join(' · ') || 'Sin medidas todavía') + '</span>' +
+      '<div class="row"><button class="btn-text" data-act="fi-photo">' + (f.photo ? 'Cambiar foto' : 'Poner foto') + '</button>' + (f.photo ? '<button class="btn-text muted" data-act="fi-photo-del">Quitar</button>' : '') + '</div></div></div>' +
+    '<input type="file" id="fi-file" accept="image/*" data-act="fi-file" hidden>' +
+    '<div class="egrid"><label>Fecha<input type="date" id="fi-date" data-key="fi-date" value="' + todayISO() + '"></label>' +
+      '<label>Altura (cm)<input type="text" inputmode="decimal" id="fi-h" data-key="fi-h" placeholder="' + (lh ? fmtNum(lh.h) : '') + '"></label>' +
+      '<label>Peso (kg)<input type="text" inputmode="decimal" id="fi-w" data-key="fi-w" placeholder="' + (lw ? fmtNum(lw.w) : '') + '"></label></div>' +
+    '<button class="btn-soft" data-act="fi-add">Apuntar medida</button>' +
+    (rows ? '<ul class="fi-list">' + rows + '</ul>' : '') +
+    (wsr.length > 1 ? '<div class="chart-wrap">' + chart(wsr, 'kg', 'Evolución del peso') + '</div>' : '') +
+    (hs.length > 1 ? '<div class="chart-wrap">' + chart(hs, 'cm', 'Evolución de la altura') + '</div>' : '') +
+    '<p class="small muted">Se guarda solo en este móvil y entra en la copia de seguridad.' + (isEric() ? ' Para valorar el crecimiento, el pediatra con sus curvas.' : '') + '</p>' +
+  '</section>';
 }
 
 function ensureEdit(){
@@ -1657,7 +1741,7 @@ function viewPlan(){
   } else {
     phaseBox = '<section class="card"><p class="small muted">Todas las fases del plan están aplicadas.</p>' + (S.prevCfg && S.prevCfg.phase ? '<button class="btn-text muted" data-act="phase-undo">Deshacer el paso a la fase ' + S.prevCfg.phase + '</button>' : '') + '</section>';
   }
-  return header('Plan') +
+  return header('Plan') + viewPerfil() +
     (isEric() ? '<h2 class="section-title">' + (season > SEASON0 ? 'Temporada' : 'Cambio de fase') + '</h2>' + phaseBox +
     '<h2 class="section-title">Fases de la temporada ' + seasonName(season) + '</h2><section class="card"><ul class="phases">' + phases + '</ul></section>' : '') +
     '<h2 class="section-title">Cómo subir peso</h2><section class="card"><ul class="guide">' +
@@ -1708,11 +1792,11 @@ function viewBackup(){
 
 const TABS = [['train', 'Entrenar'], ['history', 'Historial'], ['progress', 'Progreso'], ['tests', 'Pruebas'], ['rm', 'RM'], ['plan', 'Plan']];
 function nav(){
-  return '<nav class="nav" aria-label="Secciones"><div class="nav-in">' + TABS.filter(t => t[0] !== (isEric() ? 'rm' : 'tests')).map(t => '<button data-act="tab" data-v="' + t[0] + '"' + (S.tab === t[0] ? ' aria-current="page"' : '') + '>' + ICON[t[0]] + '<span>' + t[1] + '</span></button>').join('') + '</div></nav>';
+  return '<nav class="nav" aria-label="Secciones"><div class="nav-in">' + TABS.map(t => '<button data-act="tab" data-v="' + t[0] + '"' + (S.tab === t[0] ? ' aria-current="page"' : '') + '>' + ICON[t[0]] + '<span>' + t[1] + '</span></button>').join('') + '</div></nav>';
 }
 function viewProfiles(){
   return '<header class="top"><p class="eyebrow">Diario de fuerza</p><h1>¿Quién entrena?</h1></header>' +
-    '<div class="sessions" role="group" aria-label="Perfil">' + PROFILES.map(p => '<button class="sess who-pick" data-act="profile" data-v="' + p[0] + '"><span class="sess-k">' + p[1][0] + '</span><span class="sess-t"><b>' + p[1] + '</b></span></button>').join('') + '</div>';
+    '<div class="sessions" role="group" aria-label="Perfil">' + PROFILES.map(p => '<button class="sess who-pick" data-act="profile" data-v="' + p[0] + '">' + avatar(photoOf(p[0]), p[1][0], 'md') + '<span class="sess-t"><b>' + p[1] + '</b></span></button>').join('') + '</div>';
 }
 function chooseProfile(id){
   if (!PROFILES.some(p => p[0] === id)) return;
@@ -1860,7 +1944,7 @@ async function saveFile(filename, data){
 }
 const backupDue = () => { const lb = LS.get('lastBackup', null); return !lb || lb < addDays(todayISO(), -30); };
 const backupBody = () => ({ app:'diarioEric', version:1, profile: PROFILE, exportedAt: new Date().toISOString(), sessions: S.sessions,
-  config: { templates: S.templates, phasesApplied: S.phasesApplied, prev: S.prevCfg }, tests: S.tests, exNotes: S.exNotes, gear: S.gear });
+  config: { templates: S.templates, phasesApplied: S.phasesApplied, prev: S.prevCfg }, tests: S.tests, exNotes: S.exNotes, gear: S.gear, ficha: S.ficha });
 const autoBackupOn = () => store.mode === 'local' && LS.get('autoBackup', true) !== false;
 /* Copia automática al guardar: va a Descargas sin preguntar. Devuelve true si se ha hecho */
 async function autoBackup(){
@@ -1899,6 +1983,7 @@ async function importAction(){
   await store.saveTests(d.tests || {});
   await store.saveNotes(d.exNotes || {});
   if (d.gear) await store.saveGear(d.gear);
+  if (d.ficha) await store.saveFicha(normFicha(d.ficha));
   S.pendingImport = null; S.edit = null; S.drafts = {}; saveDrafts();
   toast('Copia recuperada'); render();
 }
@@ -2003,6 +2088,10 @@ function onClick(act, ds){
   switch (act) {
     case 'profile': chooseProfile(ds.v); break;
     case 'rm-save': saveRmAction(ds.v); break;
+    case 'fi-photo': { const f = document.getElementById('fi-file'); if (f) { f.value = ''; f.click(); } break; }
+    case 'fi-photo-del': store.saveFicha(Object.assign({}, S.ficha, { photo:null })).then(render, () => toast('No se ha podido quitar')); break;
+    case 'fi-add': addMedidaAction(); break;
+    case 'fi-del': delMedidaAction(ds.v); break;
     case 'profile-change': if (timerId || work) { toast('Termina o salta el descanso antes de cambiar de perfil'); break; } location.reload(); break;
     case 'tab': S.tab = ds.v; S.confirmDel = null; S.confirmReset = false; S.confirmPhase = null; S.confirmDiscard = false; render(); window.scrollTo(0, 0); break;
     case 'session': S.active = ds.v; S.confirmDiscard = false; render(); break;
@@ -2149,6 +2238,7 @@ root.addEventListener('change', e => {
   const el = e.target;
   if (!el.dataset) return;
   if (el.dataset.act === 'import-file') { if (el.files && el.files[0]) readImport(el.files[0]); return; }
+  if (el.dataset.act === 'fi-file') { if (el.files && el.files[0]) savePhotoAction(el.files[0]); return; }
   // Peso cambiado a mano: se copia a las series siguientes sin hacer
   if (el.dataset.act === 'it-fixnote') { const it = curItem(el.dataset.i); delete it.fixDraft; saveExNote(it.id, el.value); return; }
   if (el.dataset.act === 'fx-fixnote') { if (S.fx) { delete S.fx.noteDraft; saveExNote(S.fx.id, el.value); } return; }
