@@ -358,19 +358,38 @@ label.sub{ font-weight:700; }
 'use strict';
 
 /* ---------- Datos del plan ---------- */
-const PHASES = [
-  { n:1, name:'Técnica y base',   start:'2026-10-01', end:'2026-11-22', reps:'2-3 × 10-15 reps' },
-  { n:2, name:'Construir fuerza', start:'2026-11-23', end:'2027-02-14', reps:'3 × 8-12 reps' },
-  { n:3, name:'Más carga',        start:'2027-02-15', end:'2027-04-18', reps:'básicos 3-4 × 6-10' },
-  { n:4, name:'Fuerte y rápido',  start:'2027-04-19', end:'2027-06-30', reps:'básicos 3 × 6-10 y saltos' }
+/* Temporadas: cada una va de octubre a junio (como el curso) y le sigue un verano (julio a septiembre).
+   Las 4 fases y las 5 semanas de pruebas se repiten cada temporada con las mismas fechas.
+   La primera es la 2026-27; sus pruebas conservan los id de siempre (oct, nov…) */
+const SEASON0 = 2026;
+const PHASE_TPL = [
+  { n:1, name:'Técnica y base',   start:'10-01', end:'11-22', reps:'2-3 × 10-15 reps' },
+  { n:2, name:'Construir fuerza', start:'11-23', end:'02-14', reps:'3 × 8-12 reps' },
+  { n:3, name:'Más carga',        start:'02-15', end:'04-18', reps:'básicos 3-4 × 6-10' },
+  { n:4, name:'Fuerte y rápido',  start:'04-19', end:'06-30', reps:'básicos 3 × 6-10 y saltos' },
+  { n:5, name:'Verano',           start:'07-01', end:'09-30', reps:'mantener: 1-2 sesiones, deporte y juego', summer:true }
 ];
-const CHECKPOINTS = [
-  { id:'oct', label:'Oct', when:'Primera semana de octubre', date:'2026-10-05' },
-  { id:'nov', label:'Nov', when:'Semana del 16 de noviembre', date:'2026-11-16' },
-  { id:'feb', label:'Feb', when:'Semana del 8 de febrero', date:'2027-02-08' },
-  { id:'abr', label:'Abr', when:'Semana del 12 de abril', date:'2027-04-12' },
-  { id:'jun', label:'Jun', when:'Mediados de junio', date:'2027-06-14' }
+const CP_TPL = [
+  { k:'oct', label:'Oct', md:'10-05' }, { k:'nov', label:'Nov', md:'11-16' }, { k:'feb', label:'Feb', md:'02-08' },
+  { k:'abr', label:'Abr', md:'04-12' }, { k:'jun', label:'Jun', md:'06-14' }
 ];
+/* Fecha de la temporada Y: de octubre a diciembre es el año Y; de enero a septiembre, Y+1 */
+const seasonDate = (y, md) => (Number(md.slice(0, 2)) >= 10 ? y : y + 1) + '-' + md;
+const seasonOf = iso => { const y = Number(iso.slice(0, 4)), m = Number(iso.slice(5, 7)); return Math.max(SEASON0, m >= 10 ? y : y - 1); };
+const seasonName = y => y + '-' + String(y + 1).slice(2);
+const phasesOf = y => PHASE_TPL.map(p => Object.assign({}, p, { season:y, start: seasonDate(y, p.start), end: seasonDate(y, p.end) }));
+function cpsOf(y){
+  return CP_TPL.map(c => {
+    let date = seasonDate(y, c.md);
+    if (y > SEASON0) { const d = parseISO(date); date = addDays(date, -((d.getDay() + 6) % 7)); } // el lunes de esa semana
+    const first = y === SEASON0;
+    return { id: first ? c.k : c.k + '-' + y, season:y, date, label: first ? c.label : c.label + ' ' + date.slice(2, 4),
+      when: first && c.k === 'oct' ? 'Primera semana de octubre' : 'Semana del ' + fmtDate(date) };
+  });
+}
+/* Todas las semanas de pruebas desde la primera temporada hasta la actual */
+function allCps(){ const out = []; for (let y = SEASON0; y <= seasonOf(todayISO()); y++) out.push(...cpsOf(y)); return out; }
+const PHASES = phasesOf(SEASON0);
 const TESTS = [
   { id:'flex',    name:'Flexiones en la barra, altura fija', unit:'reps', hint:'Agujero de la barra, pies…' },
   { id:'remoinv', name:'Remo invertido en la barra, altura fija', unit:'reps', hint:'Agujero de la barra, pies…' },
@@ -688,9 +707,9 @@ function streak(){
   let n = 0; while ((c[w] || 0) >= 2) { n++; w = addDays(w, -7); }
   return n;
 }
-const phaseFor = iso => PHASES.find(p => iso <= p.end) || null;
+const phaseFor = iso => phasesOf(seasonOf(iso)).find(p => iso >= p.start && iso <= p.end) || null;
 const hasTest = id => !!(S.tests[id] && S.tests[id].vals && Object.keys(S.tests[id].vals).length);
-function upcomingCp(){ const t = todayISO(); return CHECKPOINTS.find(c => !hasTest(c.id) && addDays(c.date, 10) >= t) || null; }
+function upcomingCp(){ const t = todayISO(); return allCps().concat(cpsOf(seasonOf(t) + 1)).find(c => !hasTest(c.id) && addDays(c.date, 10) >= t) || null; }
 function computeRecords(){
   const best = {}, out = {};
   for (const s of sortedAsc()) {
@@ -1256,11 +1275,12 @@ function viewRest(){
 /* ---------- Vistas ---------- */
 function header(title, meta){
   const t = todayISO(), ph = isEric() ? phaseFor(t) : null;
-  const eyebrow = esc(profileName()) + (isEric() ? ' · ' + (ph ? 'Fase ' + ph.n + ' · ' + esc(ph.name) + ' · hasta el ' + fmtDate(ph.end) : 'Plan hasta junio completado') : '') +
+  const eyebrow = esc(profileName()) + (isEric() ? ' · ' + (ph ? (ph.summer ? 'Verano' : 'Fase ' + ph.n + ' · ' + esc(ph.name)) + ' · hasta el ' + fmtDate(ph.end) : '') : '') +
     ' <button class="btn-text who" data-act="profile-change">Cambiar</button>';
   let notice = '';
   if (S.dbError) notice = '<p class="notice warn">' + esc(S.dbError) + '</p>';
-  else if (ready() && ph && ph.n >= 2 && maxApplied() < ph.n && S.tab !== 'plan') notice = '<p class="notice warn">Ya estáis en la fase ' + ph.n + ' y los ejercicios siguen en la anterior.<button class="btn-text" data-act="tab" data-v="plan">Pasar de fase</button></p>';
+  else if (ready() && ph && ph.season > SEASON0 && ph.n === 1 && t <= addDays(ph.start, 14) && S.tab !== 'plan') notice = '<p class="notice">Empieza la temporada ' + seasonName(ph.season) + '. Buen momento para revisar el plan.<button class="btn-text" data-act="tab" data-v="plan">Ver plan</button></p>';
+  else if (ready() && ph && ph.season === SEASON0 && !ph.summer && ph.n >= 2 && maxApplied() < ph.n && S.tab !== 'plan') notice = '<p class="notice warn">Ya estáis en la fase ' + ph.n + ' y los ejercicios siguen en la anterior.<button class="btn-text" data-act="tab" data-v="plan">Pasar de fase</button></p>';
   else if (store.mode === 'local' && S.sessions.length && backupDue() && S.tab !== 'plan') notice = '<p class="notice">Hace más de un mes que no se hace una copia.<button class="btn-text" data-act="tab" data-v="plan">Hacer copia</button></p>';
   return '<header class="top"><p class="eyebrow">' + eyebrow + '</p><h1>' + esc(title) + '</h1>' + (meta ? '<p class="meta">' + meta + '</p>' : '') + notice + '</header>';
 }
@@ -1483,7 +1503,8 @@ function viewProgress(){
     '<h2 class="section-title">Últimas veces</h2><section class="card"><ul class="hist-list">' + recent + '</ul></section>';
 }
 
-function defaultCp(){ const u = upcomingCp(); return u ? u.id : CHECKPOINTS[CHECKPOINTS.length - 1].id; }
+function defaultCp(){ const u = upcomingCp(), all = allCps(); return u && all.some(c => c.id === u.id) ? u.id : all[all.length - 1].id; }
+const cpById = id => allCps().find(c => c.id === id) || null;
 function testDraft(cp){
   if (!S.testDrafts[cp]) {
     const saved = S.tests[cp] || {}, vals = {};
@@ -1494,27 +1515,31 @@ function testDraft(cp){
 }
 // Nota de la prueba anterior, para repetir la misma altura o el mismo peso
 function prevTestNote(cp, tid){
-  const i = CHECKPOINTS.findIndex(c => c.id === cp);
-  for (let j = i - 1; j >= 0; j--) { const t = S.tests[CHECKPOINTS[j].id]; if (t && t.notes && t.notes[tid]) return { cp: CHECKPOINTS[j], text: t.notes[tid] }; }
+  const all = allCps(), i = all.findIndex(c => c.id === cp);
+  for (let j = i - 1; j >= 0; j--) { const t = S.tests[all[j].id]; if (t && t.notes && t.notes[tid]) return { cp: all[j], text: t.notes[tid] }; }
   return null;
 }
 function viewTests(){
   if (!ready()) return header('Pruebas') + '<p class="empty">Cargando…</p>';
-  if (!S.cp) S.cp = defaultCp();
-  const cp = CHECKPOINTS.find(c => c.id === S.cp), dr = testDraft(S.cp);
-  const seg = CHECKPOINTS.map(c => '<button class="cp" data-act="cp" data-v="' + c.id + '" aria-pressed="' + (c.id === S.cp) + '"><b>' + c.label + '</b><small>' + (hasTest(c.id) ? '✓ hecha' : '') + '</small></button>').join('');
+  if (!S.cp || !cpById(S.cp)) S.cp = defaultCp();
+  const cp = cpById(S.cp), dr = testDraft(S.cp), all = allCps();
+  /* Comparativa: las semanas con pruebas hechas y las de la temporada actual */
+  const CMP = all.filter(c => hasTest(c.id) || c.season === seasonOf(todayISO()));
+  const seasons = Array.from(new Set(all.map(c => c.season)));
+  const seasonPills = seasons.length > 1 ? '<div class="chips" role="group" aria-label="Temporada">' + seasons.map(y => '<button class="pill sm" data-act="cp" data-v="' + (cpsOf(y).find(c => hasTest(c.id)) || cpsOf(y)[0]).id + '" aria-pressed="' + (cp.season === y) + '">' + seasonName(y) + '</button>').join('') + '</div>' : '';
+  const seg = cpsOf(cp.season).map(c => '<button class="cp" data-act="cp" data-v="' + c.id + '" aria-pressed="' + (c.id === S.cp) + '"><b>' + c.label + '</b><small>' + (hasTest(c.id) ? '✓ hecha' : '') + '</small></button>').join('');
   const inputs = TESTS.map(t => {
     const pn = prevTestNote(S.cp, t.id);
     return '<div class="tblock"><label class="trow"><span>' + esc(t.name) + '</span><span class="tin"><input type="text" inputmode="numeric" autocomplete="off" id="t-' + S.cp + '-' + t.id + '" data-key="t-' + S.cp + '-' + t.id + '" data-act="test" data-t="' + t.id + '" value="' + esc(dr.vals[t.id] == null ? '' : dr.vals[t.id]) + '" aria-label="' + esc(t.name) + ' en ' + t.unit + '"><span class="unit">' + t.unit + '</span></span></label>' +
       '<input type="text" class="tnote" autocomplete="off" id="tn-' + S.cp + '-' + t.id + '" data-key="tn-' + S.cp + '-' + t.id + '" data-act="testnote" data-t="' + t.id + '" value="' + esc(dr.notes[t.id] || '') + '" placeholder="Nota: ' + esc(t.hint) + '" aria-label="Nota de ' + esc(t.name) + '">' +
       (pn ? '<p class="tprev">En ' + esc(pn.cp.label.toLowerCase()) + ': ' + esc(pn.text) + '</p>' : '') + '</div>';
   }).join('');
-  const noteList = t => { const l = CHECKPOINTS.filter(c => S.tests[c.id] && S.tests[c.id].notes && S.tests[c.id].notes[t.id]).map(c => '<li><b>' + c.label + ':</b> ' + esc(S.tests[c.id].notes[t.id]) + '</li>'); return l.length ? '<ul class="cmp-notes">' + l.join('') + '</ul>' : ''; };
-  const cells = get => { let prev = null; return CHECKPOINTS.map(c => { const v = get(c); const up = v != null && prev != null && v > prev; if (v != null) prev = v; return '<span class="cell-cmp' + (up ? ' up' : '') + '"><small>' + c.label + '</small><b>' + (v == null ? '—' : fmtNum(v)) + '</b></span>'; }).join(''); };
+  const noteList = t => { const l = CMP.filter(c => S.tests[c.id] && S.tests[c.id].notes && S.tests[c.id].notes[t.id]).map(c => '<li><b>' + c.label + ':</b> ' + esc(S.tests[c.id].notes[t.id]) + '</li>'); return l.length ? '<ul class="cmp-notes">' + l.join('') + '</ul>' : ''; };
+  const cells = get => { let prev = null; return CMP.map(c => { const v = get(c); const up = v != null && prev != null && v > prev; if (v != null) prev = v; return '<span class="cell-cmp' + (up ? ' up' : '') + '"><small>' + c.label + '</small><b>' + (v == null ? '—' : fmtNum(v)) + '</b></span>'; }).join(''); };
   const cmpTests = TESTS.map(t => '<div><span class="cmp-name">' + esc(t.name) + ' (' + t.unit + ')</span><div class="cmp-cells">' + cells(c => S.tests[c.id] && S.tests[c.id].vals && S.tests[c.id].vals[t.id] != null ? S.tests[c.id].vals[t.id] : null) + '</div>' + noteList(t) + '</div>').join('');
   const cmpW = WORKING.map(w => '<div><span class="cmp-name">' + esc(w.name) + ', peso de trabajo (kg)</span><div class="cmp-cells">' + cells(c => S.tests[c.id] && S.tests[c.id].pesos && S.tests[c.id].pesos[w.id] != null ? S.tests[c.id].pesos[w.id] : null) + '</div></div>').join('');
   return header('Pruebas', esc(cp.when) + '. Sustituyen a una sesión normal: después del calentamiento, siempre en el mismo orden y con la barra en el mismo agujero (apúntalo en la nota de cada prueba). Cada prueba se para en cuanto la técnica falla.') +
-    '<div class="cps" role="group" aria-label="Semana de pruebas">' + seg + '</div>' +
+    seasonPills + '<div class="cps" role="group" aria-label="Semana de pruebas">' + seg + '</div>' +
     '<section class="card"><label class="lab" for="t-date">Fecha</label><input id="t-date" type="date" data-key="tdate-' + S.cp + '" data-act="testdate" value="' + esc(dr.date) + '"><div>' + inputs + '</div></section>' +
     '<button class="btn-primary" data-act="test-save">Guardar pruebas de ' + cp.label.toLowerCase() + '</button>' +
     '<h2 class="section-title">Comparativa</h2><p class="small muted">En verde, lo que mejora respecto a la prueba anterior. Los pesos de trabajo se copian del diario al guardar cada prueba.</p>' +
@@ -1528,7 +1553,8 @@ function ensureEdit(){
 }
 function viewPlan(){
   const t = todayISO(), cur = phaseFor(t), ed = ensureEdit();
-  const phases = PHASES.map(p => '<li class="' + (cur && cur.n === p.n ? 'now' : '') + '"><span class="ph-n">' + p.n + '</span><span class="ph-name">' + esc(p.name) + (cur && cur.n === p.n ? '<span class="now-tag">ahora</span>' : '') + '</span><span class="ph-meta">' + fmtDate(p.start) + ' a ' + fmtDate(p.end) + ' · ' + esc(p.reps) + '</span></li>').join('');
+  const season = seasonOf(t);
+  const phases = phasesOf(season).map(p => '<li class="' + (cur && cur.n === p.n ? 'now' : '') + '"><span class="ph-n">' + p.n + '</span><span class="ph-name">' + esc(p.name) + (cur && cur.n === p.n ? '<span class="now-tag">ahora</span>' : '') + '</span><span class="ph-meta">' + fmtDate(p.start) + ' a ' + fmtDate(p.end) + ' · ' + esc(p.reps) + '</span></li>').join('');
   const seg = KEYS.map(x => '<button class="sess" data-act="edit-key" data-v="' + x + '" aria-pressed="' + (x === ed.key) + '"><span class="sess-k">' + x + '</span><span class="sess-t"><b>' + SESSION_SUB[x] + '</b><small></small></span></button>').join('');
   const list = ed.tpl[ed.key] || [];
   const rows = list.map((e, i) => {
@@ -1552,9 +1578,13 @@ function viewPlan(){
       '<div class="row">' + (i > 0 ? '<button class="btn-text" data-act="e-up" data-i="' + i + '">Subir</button>' : '') + (i < list.length - 1 ? '<button class="btn-text" data-act="e-down" data-i="' + i + '">Bajar</button>' : '') + '<button class="btn-text" data-act="fx-open" data-v="' + esc(e.id) + '">Ficha</button><button class="btn-text muted" data-act="e-del" data-i="' + i + '">Quitar</button></div>' +
     '</div>';
   }).join('');
-  const np = nextPhaseToApply();
+  const np = season === SEASON0 ? nextPhaseToApply() : null;
   let phaseBox;
-  if (np) {
+  if (season > SEASON0) {
+    phaseBox = '<section class="card"><p><strong>Temporada ' + seasonName(season) + '.</strong> Las fases ya no cambian ejercicios solas: marcan el rango de repeticiones de cada momento.</p>' +
+      '<ul class="guide"><li>Al empezar la temporada, revisad el plan: con el estirón puede tocar más carga, otro ejercicio o un tercer día.</li>' +
+      '<li>En cada fase, ajusta las series y repeticiones de los básicos a lo que dice la lista de abajo.</li></ul></section>';
+  } else if (np) {
     const early = t < np.start;
     phaseBox = '<section class="card"><p><strong>Fase ' + np.n + ': ' + esc(np.name) + '</strong>, desde el ' + fmtDate(np.start) + '.</p>' +
       '<ul class="guide">' + PHASE_CHANGES[np.n].summary.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>' +
@@ -1565,8 +1595,8 @@ function viewPlan(){
     phaseBox = '<section class="card"><p class="small muted">Todas las fases del plan están aplicadas.</p>' + (S.prevCfg && S.prevCfg.phase ? '<button class="btn-text muted" data-act="phase-undo">Deshacer el paso a la fase ' + S.prevCfg.phase + '</button>' : '') + '</section>';
   }
   return header('Plan') +
-    (isEric() ? '<h2 class="section-title">Cambio de fase</h2>' + phaseBox +
-    '<h2 class="section-title">Fases hasta junio</h2><section class="card"><ul class="phases">' + phases + '</ul></section>' : '') +
+    (isEric() ? '<h2 class="section-title">' + (season > SEASON0 ? 'Temporada' : 'Cambio de fase') + '</h2>' + phaseBox +
+    '<h2 class="section-title">Fases de la temporada ' + seasonName(season) + '</h2><section class="card"><ul class="phases">' + phases + '</ul></section>' : '') +
     '<h2 class="section-title">Cómo subir peso</h2><section class="card"><ul class="guide">' +
       '<li>Cuando haga todas las series en el máximo del rango y diga <strong>fácil</strong> o <strong>justo</strong>, el diario propone el siguiente peso.</li>' +
       '<li>Si dice <strong>duro</strong>, se repite el peso hasta que salga justo. Ninguna serie al fallo.</li>' +
@@ -1707,7 +1737,7 @@ async function saveTestsAction(){
   try {
     await store.saveTests(next); delete S.testDrafts[cp];
     const copied = await autoBackup();
-    toast('Pruebas de ' + CHECKPOINTS.find(c => c.id === cp).label.toLowerCase() + ' guardadas' + (copied ? '. Copia en Descargas.' : ''));
+    toast('Pruebas de ' + cpById(cp).label.toLowerCase() + ' guardadas' + (copied ? '. Copia en Descargas.' : ''));
   } catch (e) { toast('No se han guardado: ' + ((e && e.message) || 'inténtalo de nuevo')); }
   render();
 }
@@ -1851,15 +1881,15 @@ function buildWorkbook(XLSX){
   ws2['!cols'] = [{ wch:34 }, { wch:9 }, { wch:12 }, { wch:15 }, { wch:12 }, { wch:15 }, { wch:11 }, { wch:8 }, { wch:14 }];
 
   const tv = (c, f) => { const t = S.tests[c.id]; const v = t ? f(t) : null; return v == null ? '' : v; };
-  const tp = [['Prueba'].concat(CHECKPOINTS.map(c => c.label)), ['Fecha'].concat(CHECKPOINTS.map(c => tv(c, t => t.date ? excelDate(t.date) : null)))];
+  const tp = [['Prueba'].concat(allCps().map(c => c.label)), ['Fecha'].concat(allCps().map(c => tv(c, t => t.date ? excelDate(t.date) : null)))];
   for (const t of TESTS) {
-    tp.push([t.name + ' (' + t.unit + ')'].concat(CHECKPOINTS.map(c => tv(c, x => x.vals ? x.vals[t.id] : null))));
-    if (CHECKPOINTS.some(c => S.tests[c.id] && S.tests[c.id].notes && S.tests[c.id].notes[t.id])) tp.push(['  Nota'].concat(CHECKPOINTS.map(c => tv(c, x => x.notes ? x.notes[t.id] : null))));
+    tp.push([t.name + ' (' + t.unit + ')'].concat(allCps().map(c => tv(c, x => x.vals ? x.vals[t.id] : null))));
+    if (allCps().some(c => S.tests[c.id] && S.tests[c.id].notes && S.tests[c.id].notes[t.id])) tp.push(['  Nota'].concat(allCps().map(c => tv(c, x => x.notes ? x.notes[t.id] : null))));
   }
-  for (const w of WORKING) tp.push([w.name + ', peso de trabajo (kg)'].concat(CHECKPOINTS.map(c => tv(c, x => x.pesos ? x.pesos[w.id] : null))));
+  for (const w of WORKING) tp.push([w.name + ', peso de trabajo (kg)'].concat(allCps().map(c => tv(c, x => x.pesos ? x.pesos[w.id] : null))));
   const ws3 = XLSX.utils.aoa_to_sheet(tp);
-  fmtDates(ws3, CHECKPOINTS.map((_, i) => ({ r: 1, c: i + 1 })));
-  ws3['!cols'] = [{ wch:46 }].concat(CHECKPOINTS.map(() => ({ wch:11 })));
+  fmtDates(ws3, allCps().map((_, i) => ({ r: 1, c: i + 1 })));
+  ws3['!cols'] = [{ wch:46 }].concat(allCps().map(() => ({ wch:11 })));
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws1, 'Sesiones');
