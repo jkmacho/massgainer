@@ -932,13 +932,25 @@ function similarTo(id){
   }
   return out.sort((x, y) => y.sc - x.sc || byName(x.e, y.e)).map(x => x.e);
 }
-function swapItem(id){
+async function swapItem(id){
   const p = S.pick, e = LIB.get(id), d = curDraft(), it = d.items[p.i];
   if (!e || !it || it.id !== p.from) return;
   if (it.done.some(Boolean)) { toast('Ya tiene series hechas; añade el otro en vez de cambiarlo'); return; }
   if (d.items.some(x => x.id === id)) return;
   d.items[p.i] = draftItem(e); saveDrafts();
-  toast(it.name + ' cambiado por ' + e.name + ' solo hoy');
+  if (!p.forever) { toast(it.name + ' cambiado por ' + e.name + ' solo hoy'); return; }
+  /* Para siempre: también en el plan de la sesión, en el mismo sitio y con el mismo descanso */
+  const t = clone(S.templates), l = t[d.session] || [], j = idxOf(l, it.id);
+  if (j < 0 || idxOf(l, id) >= 0) { toast(it.name + ' cambiado por ' + e.name + ' solo hoy (no estaba en el plan)'); return; }
+  const nx = { id:e.id, name:e.name, kind:e.kind, sets:e.sets, min:e.min, max:e.max, weight:e.weight, step:e.step, note:e.note || '' };
+  if (l[j].rest) nx.rest = l[j].rest;
+  l.splice(j, 1, nx);
+  try {
+    await store.saveConfig({ templates: t, phasesApplied: S.phasesApplied, prev: S.prevCfg });
+    if (S.edit && !S.edit.dirty) S.edit = null;
+    toast(it.name + ' cambiado por ' + e.name + ' para siempre');
+  } catch (err) { toast('Cambiado solo hoy: no se pudo guardar el plan'); }
+  render();
 }
 function pickIds(){
   if (S.pick.ctx === 'plan') { const ed = ensureEdit(); return (ed.tpl[ed.key] || []).map(e => e.id); }
@@ -983,10 +995,11 @@ function pickResults(){
 function viewPicker(){
   const p = S.pick;
   const swap = p.ctx === 'swap';
-  const where = swap ? 'Sustituye a ' + exName(p.from) + ' solo hoy; el plan no cambia.' : p.ctx === 'plan' ? 'Se añade al plan de la sesión ' + ensureEdit().key + '.' : 'Se añade a la sesión ' + S.active + ' de hoy.';
+  const where = swap ? (p.forever ? 'Sustituye a ' + exName(p.from) + ' hoy y en el plan de la sesión ' + curDraft().session + '.' : 'Sustituye a ' + exName(p.from) + ' solo hoy; el plan no cambia.') : p.ctx === 'plan' ? 'Se añade al plan de la sesión ' + ensureEdit().key + '.' : 'Se añade a la sesión ' + S.active + ' de hoy.';
   const pills = (list, act, cur) => list.map(x => '<button class="pill sm" data-act="' + act + '" data-v="' + x[0] + '" aria-pressed="' + (cur === x[0]) + '">' + x[1] + '</button>').join('');
   return '<div class="sheet" data-sheet="pick" role="dialog" aria-modal="true" aria-labelledby="pk-title"><div class="sheet-in">' +
     '<div class="sheet-head"><h2 id="pk-title" class="section-title">' + (swap ? 'Cambiar ejercicio' : 'Añadir ejercicio') + '</h2><button class="btn-text" data-act="sheet-close">Hecho</button></div>' +
+    (swap ? '<div class="chips" role="group" aria-label="Cuánto dura el cambio">' + pills([['0', 'Solo hoy'], ['1', 'Para siempre']], 'pk-forever', p.forever ? '1' : '0') + '</div>' : '') +
     '<p class="small muted">' + where + ' Toca un ejercicio para ver cómo se hace.</p>' +
     '<input type="search" class="pk-q" data-key="pk-q" data-act="pk-q" value="' + esc(p.q) + '" placeholder="Buscar: curl, sentadilla, polea…" aria-label="Buscar ejercicio" autocomplete="off" enterkeyhint="search">' +
     bodyMaps(m => p.m === m ? 'on' : '', true) +
@@ -1909,6 +1922,7 @@ function onClick(act, ds){
     }
     case 'map-days': S.mapDays = Number(ds.v); render(); break;
     case 'pk-swap': swapItem(ds.v); closeSheet(); render(); break;
+    case 'pk-forever': S.pick.forever = ds.v === '1'; render(); break;
     case 'it-swap': { const it = curItem(ds.i); S.pick = { ctx:'swap', i: Number(ds.i), from: it.id, m:null, eq:null, q:'' }; openSheet(); render(); break; }
     case 'it-notes': { const it = curItem(ds.i); it.notesOpen = !it.notesOpen; delete it.fixDraft; if (it.notesOpen) S.focusKey = 'dn-' + S.active + '-' + ds.i; saveDrafts(); render(); break; }
     case 'fx-open': S.fx = { id: ds.v }; openSheet(); render(); break;
