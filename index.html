@@ -67,6 +67,10 @@ body.resting .app{ padding-bottom:calc(var(--nav-h) + var(--rest-h) + 28px + env
 /* Cabecera */
 .top{ display:flex; flex-direction:column; gap:4px; padding-top:6px; }
 .eyebrow{ font-size:12.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--accent); }
+.eyebrow .who{ font-size:12.5px; letter-spacing:0; text-transform:none; min-height:0; padding:0 0 0 6px; }
+.sess.who-pick{ min-height:96px; }
+.who-pick .sess-k{ width:auto; font-size:44px; }
+.who-pick .sess-t b{ font-size:20px; }
 h1{ font-family:var(--display); font-weight:700; font-size:38px; line-height:1; letter-spacing:.005em; text-transform:uppercase; }
 .meta{ color:var(--muted); font-size:14.5px; }
 .notice{ display:flex; flex-wrap:wrap; align-items:center; gap:4px 10px; margin-top:8px; padding:10px 12px; border-radius:12px; background:var(--accent-soft); font-size:14.5px; }
@@ -527,9 +531,17 @@ const fmtW = w => w == null ? 'sin peso' : (w === 0 ? 'peso corporal' : fmtNum(w
 const clampInt = (v, lo, hi, def) => { const x = num(v); if (x == null) return def; const n = Math.round(x); return Math.min(hi, Math.max(lo, n)); };
 const newId = () => (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ('id' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8));
 
+/* Perfiles: cada uno con sus sesiones, plan, pruebas y notas. Eric usa las claves de siempre (diarioEric:x);
+   los demás, diarioEric:<perfil>:x. El material de casa y el descanso por defecto son compartidos. */
+const PROFILES = [['eric', 'Eric'], ['juan', 'Juan']];
+let PROFILE = null;
+const isEric = () => PROFILE === 'eric';
+const profileName = () => (PROFILES.find(p => p[0] === PROFILE) || ['', ''])[1];
+const SHARED_KEYS = ['gear', 'restSec'];
+const lsKey = k => 'diarioEric:' + (PROFILE && PROFILE !== 'eric' && SHARED_KEYS.indexOf(k) < 0 ? PROFILE + ':' : '') + k;
 const LS = {
-  get(k, d){ try { const v = localStorage.getItem('diarioEric:' + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
-  set(k, v){ try { localStorage.setItem('diarioEric:' + k, JSON.stringify(v)); return true; } catch (e) { return false; } }
+  get(k, d){ try { const v = localStorage.getItem(lsKey(k)); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+  set(k, v){ try { localStorage.setItem(lsKey(k), JSON.stringify(v)); return true; } catch (e) { return false; } }
 };
 
 const caps = {};
@@ -548,10 +560,10 @@ const S = {
   exNotes:{}, toast:'', dbError:'', canDownload:false, exporting:false, focusKey:null, phasesApplied:[], prevCfg:null, confirmPhase:null,
   gear:{}, gearDraft:{}
 };
-(function restoreDrafts(){
+function restoreDrafts(){
   const d = LS.get('drafts', {}); const t = todayISO();
   for (const k of Object.keys(d || {})) { if (d[k] && d[k].created === t) S.drafts[k] = d[k]; }
-})();
+}
 
 /* ---------- Almacenamiento: db de Claude o, si no hay, este navegador ---------- */
 const store = {
@@ -562,9 +574,9 @@ const store = {
     if (db && user) { try { uid = await user.id(); } catch (e) {} }
     if (db && uid) {
       this.mode = 'db';
-      const base = 'data/users/' + uid;
-      const cfg = db.doc(base + '/config');
-      this.refs = { cfg, sessions: cfg.collection('sessions'), tests: db.doc(base + '/tests'), notes: db.doc(base + '/notes'), gear: db.doc(base + '/gear') };
+      const base = 'data/users/' + uid, sfx = isEric() ? '' : '_' + PROFILE;
+      const cfg = db.doc(base + '/config' + sfx);
+      this.refs = { cfg, sessions: cfg.collection('sessions'), tests: db.doc(base + '/tests' + sfx), notes: db.doc(base + '/notes' + sfx), gear: db.doc(base + '/gear') };
       this.refs.sessions.onSnapshot(snap => {
         S.sessions = snap.docs.map(d => Object.assign({ id: d.id }, clone(d.data() || {})));
         S.loaded.sessions = true; render();
@@ -595,7 +607,10 @@ const store = {
     } else {
       this.mode = 'local';
       S.sessions = LS.get('sessions', []);
-      const c = LS.get('config', null);
+      let c = LS.get('config', null);
+      if (!c && !isEric()) {
+        try { const e = JSON.parse(localStorage.getItem('diarioEric:config') || 'null'); if (e && e.templates) { c = { templates: clone(e.templates), phasesApplied: [], prev: null }; LS.set('config', c); } } catch (e) {}
+      }
       if (c && c.templates && c.templates.A && c.templates.B) { S.templates = c.templates; S.phasesApplied = c.phasesApplied || []; S.prevCfg = c.prev || null; }
       else { const t = LS.get('templates', null); if (t && t.A && t.B) S.templates = t; }
       S.tests = LS.get('tests', {});
@@ -1217,8 +1232,9 @@ function viewRest(){
 
 /* ---------- Vistas ---------- */
 function header(title, meta){
-  const t = todayISO(), ph = phaseFor(t);
-  const eyebrow = ph ? 'Fase ' + ph.n + ' · ' + esc(ph.name) + ' · hasta el ' + fmtDate(ph.end) : 'Plan hasta junio completado';
+  const t = todayISO(), ph = isEric() ? phaseFor(t) : null;
+  const eyebrow = esc(profileName()) + (isEric() ? ' · ' + (ph ? 'Fase ' + ph.n + ' · ' + esc(ph.name) + ' · hasta el ' + fmtDate(ph.end) : 'Plan hasta junio completado') : '') +
+    ' <button class="btn-text who" data-act="profile-change">Cambiar</button>';
   let notice = '';
   if (S.dbError) notice = '<p class="notice warn">' + esc(S.dbError) + '</p>';
   else if (ready() && ph && ph.n >= 2 && maxApplied() < ph.n && S.tab !== 'plan') notice = '<p class="notice warn">Ya estáis en la fase ' + ph.n + ' y los ejercicios siguen en la anterior.<button class="btn-text" data-act="tab" data-v="plan">Pasar de fase</button></p>';
@@ -1226,7 +1242,9 @@ function header(title, meta){
   return '<header class="top"><p class="eyebrow">' + eyebrow + '</p><h1>' + esc(title) + '</h1>' + (meta ? '<p class="meta">' + meta + '</p>' : '') + notice + '</header>';
 }
 function trainMeta(){
-  const t = todayISO(), wk = weekCount(), cp = upcomingCp();
+  const t = todayISO(), wk = weekCount();
+  if (!isEric()) return 'Esta semana: ' + wk + ' ' + (wk === 1 ? 'sesión' : 'sesiones') + '.';
+  const cp = upcomingCp();
   let m = 'Esta semana: ' + wk + ' de 2-3 sesiones.';
   if (cp) m += cp.date <= t ? ' Tocan las pruebas de ' + cp.label.toLowerCase() + '.' : ' Próximas pruebas: semana del ' + fmtDate(cp.date) + '.';
   return m;
@@ -1524,8 +1542,8 @@ function viewPlan(){
     phaseBox = '<section class="card"><p class="small muted">Todas las fases del plan están aplicadas.</p>' + (S.prevCfg && S.prevCfg.phase ? '<button class="btn-text muted" data-act="phase-undo">Deshacer el paso a la fase ' + S.prevCfg.phase + '</button>' : '') + '</section>';
   }
   return header('Plan') +
-    '<h2 class="section-title">Cambio de fase</h2>' + phaseBox +
-    '<h2 class="section-title">Fases hasta junio</h2><section class="card"><ul class="phases">' + phases + '</ul></section>' +
+    (isEric() ? '<h2 class="section-title">Cambio de fase</h2>' + phaseBox +
+    '<h2 class="section-title">Fases hasta junio</h2><section class="card"><ul class="phases">' + phases + '</ul></section>' : '') +
     '<h2 class="section-title">Cómo subir peso</h2><section class="card"><ul class="guide">' +
       '<li>Cuando haga todas las series en el máximo del rango y diga <strong>fácil</strong> o <strong>justo</strong>, el diario propone el siguiente peso.</li>' +
       '<li>Si dice <strong>duro</strong>, se repite el peso hasta que salga justo. Ninguna serie al fallo.</li>' +
@@ -1572,9 +1590,19 @@ function viewBackup(){
 
 const TABS = [['train', 'Entrenar'], ['history', 'Historial'], ['progress', 'Progreso'], ['tests', 'Pruebas'], ['plan', 'Plan']];
 function nav(){
-  return '<nav class="nav" aria-label="Secciones"><div class="nav-in">' + TABS.map(t => '<button data-act="tab" data-v="' + t[0] + '"' + (S.tab === t[0] ? ' aria-current="page"' : '') + '>' + ICON[t[0]] + '<span>' + t[1] + '</span></button>').join('') + '</div></nav>';
+  return '<nav class="nav" aria-label="Secciones"><div class="nav-in">' + TABS.filter(t => isEric() || t[0] !== 'tests').map(t => '<button data-act="tab" data-v="' + t[0] + '"' + (S.tab === t[0] ? ' aria-current="page"' : '') + '>' + ICON[t[0]] + '<span>' + t[1] + '</span></button>').join('') + '</div></nav>';
+}
+function viewProfiles(){
+  return '<header class="top"><p class="eyebrow">Diario de fuerza</p><h1>¿Quién entrena?</h1></header>' +
+    '<div class="sessions" role="group" aria-label="Perfil">' + PROFILES.map(p => '<button class="sess who-pick" data-act="profile" data-v="' + p[0] + '"><span class="sess-k">' + p[1][0] + '</span><span class="sess-t"><b>' + p[1] + '</b></span></button>').join('') + '</div>';
+}
+function chooseProfile(id){
+  if (!PROFILES.some(p => p[0] === id)) return;
+  PROFILE = id; S.tab = 'train';
+  restoreDrafts(); render(); store.init();
 }
 function view(){
+  if (!PROFILE) return viewProfiles();
   if (!S.templates.L) S.templates.L = clone(DEFAULT_TEMPLATES.L); // configuraciones guardadas antes de existir la Libre
   registerCustom();
   const body = { train:viewTrain, history:viewHistory, progress:viewProgress, tests:viewTests, plan:viewPlan }[S.tab]();
@@ -1713,21 +1741,21 @@ async function saveFile(filename, data){
   setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 const backupDue = () => { const lb = LS.get('lastBackup', null); return !lb || lb < addDays(todayISO(), -30); };
-const backupBody = () => ({ app:'diarioEric', version:1, exportedAt: new Date().toISOString(), sessions: S.sessions,
+const backupBody = () => ({ app:'diarioEric', version:1, profile: PROFILE, exportedAt: new Date().toISOString(), sessions: S.sessions,
   config: { templates: S.templates, phasesApplied: S.phasesApplied, prev: S.prevCfg }, tests: S.tests, exNotes: S.exNotes, gear: S.gear });
 const autoBackupOn = () => store.mode === 'local' && LS.get('autoBackup', true) !== false;
 /* Copia automática al guardar: va a Descargas sin preguntar. Devuelve true si se ha hecho */
 async function autoBackup(){
   if (!autoBackupOn()) return false;
   try {
-    await saveFile('diario-eric-' + todayISO() + '.json', JSON.stringify(backupBody()));
+    await saveFile('diario-' + PROFILE + '-' + todayISO() + '.json', JSON.stringify(backupBody()));
     LS.set('lastBackup', todayISO()); return true;
   } catch (e) { return false; }
 }
 /* Hacer copia: descarga el .json en Descargas */
 async function backupAction(){
   try {
-    await saveFile('diario-eric-' + todayISO() + '.json', JSON.stringify(backupBody()));
+    await saveFile('diario-' + PROFILE + '-' + todayISO() + '.json', JSON.stringify(backupBody()));
     LS.set('lastBackup', todayISO()); toast('Copia descargada'); render();
   } catch (e) { if (!(e && e.code === 'declined')) toast('No se ha podido hacer la copia'); }
 }
@@ -1736,6 +1764,8 @@ function readImport(file){
   r.onload = () => {
     let d = null; try { d = JSON.parse(r.result); } catch (e) {}
     if (!d || d.app !== 'diarioEric' || !Array.isArray(d.sessions)) { toast('Ese fichero no es una copia del diario'); return; }
+    const owner = d.profile || 'eric';
+    if (owner !== PROFILE) { toast('Esa copia es del perfil de ' + ((PROFILES.find(p => p[0] === owner) || ['', owner])[1])); return; }
     S.pendingImport = { exportedAt: String(d.exportedAt || todayISO()), data: d }; render();
   };
   r.onerror = () => toast('No se ha podido leer el fichero');
@@ -1820,7 +1850,7 @@ async function exportXlsx(){
     try { XLSX = await loadXlsx(); }
     catch (e) { toast('No se ha podido preparar el Excel. Revisa la conexión o descarga el CSV'); return; }
     const buf = XLSX.write(buildWorkbook(XLSX), { bookType:'xlsx', type:'array', compression:true });
-    await saveFile('diario-fuerza-eric.xlsx', new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+    await saveFile('diario-fuerza-' + PROFILE + '.xlsx', new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
     toast('Excel descargado');
   } catch (e) {
     if (!(e && e.code === 'declined')) toast('No se ha podido descargar el Excel');
@@ -1831,7 +1861,7 @@ async function exportCsv(){
   const rows = [['fecha', 'sesion', 'ejercicio', 'peso_kg', 'series', 'unidad', 'esfuerzo', 'nota_ejercicio', 'nota']];
   for (const s of sortedAsc()) for (const it of (s.items || [])) rows.push([s.date, s.session, it.name, mixedW(it) ? setWeights(it).map(w => w == null ? '-' : fmtNum(w)).join(' / ') : (it.weight == null ? '' : fmtNum(it.weight)), (it.sets || []).map(fmtNum).join(' / '), it.kind === 'time' ? 's' : 'reps', EFF[it.effort] || '', it.note || '', s.note || '']);
   const csv = '\ufeff' + rows.map(r => r.map(cell).join(';')).join('\r\n');
-  try { await saveFile('diario-fuerza-eric.csv', csv); toast('Historial descargado'); }
+  try { await saveFile('diario-fuerza-' + PROFILE + '.csv', csv); toast('Historial descargado'); }
   catch (e) { if (!(e && e.code === 'declined')) toast('No se ha podido descargar el archivo'); }
 }
 
@@ -1853,6 +1883,8 @@ function markDone(i, s){
 
 function onClick(act, ds){
   switch (act) {
+    case 'profile': chooseProfile(ds.v); break;
+    case 'profile-change': if (timerId || work) { toast('Termina o salta el descanso antes de cambiar de perfil'); break; } location.reload(); break;
     case 'tab': S.tab = ds.v; S.confirmDel = null; S.confirmReset = false; S.confirmPhase = null; S.confirmDiscard = false; render(); window.scrollTo(0, 0); break;
     case 'session': S.active = ds.v; S.confirmDiscard = false; render(); break;
     case 'pk-open': {
@@ -2013,7 +2045,6 @@ setInterval(() => {
 }, 1000);
 
 render();
-store.init();
 S.canDownload = true;
 /* PWA: pedir que el navegador no borre los datos y registrar el service worker */
 try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
