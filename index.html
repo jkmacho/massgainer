@@ -1059,10 +1059,40 @@ function clockText(ms){
 /* ---------- Temporizador de descanso ---------- */
 let timerEnd = 0, timerTotal = 90, timerId = null, audioCtx = null, wakeLock = null;
 const timerLeft = () => Math.max(0, Math.ceil((timerEnd - Date.now()) / 1000));
+/* Si el aviso llega más de 3 s tarde (la app estaba congelada en segundo plano), no suena al volver */
+const LATE = 3000;
+/* WAV de 16 bits a 8 kHz generado en el momento; f(t) da la amplitud (-32767..32767) en el segundo t */
+function wavURL(sec, f){
+  const rate = 8000, n = Math.round(sec * rate), v = new DataView(new ArrayBuffer(44 + n * 2));
+  const str = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  str(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); str(8, 'WAVEfmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); str(36, 'data'); v.setUint32(40, n * 2, true);
+  for (let i = 0; i < n; i++) v.setInt16(44 + i * 2, Math.round(f(i / rate)), true);
+  return URL.createObjectURL(new Blob([v.buffer], { type:'audio/wav' }));
+}
+/* Zumbido grave casi inaudible en bucle: mientras suena, Android no congela la página y el aviso llega a su hora */
+let aliveEl = null; const beepEls = {};
+function keepAlive(on){
+  try {
+    if (on) { if (!aliveEl) { aliveEl = new Audio(wavURL(2, t => 30 * Math.sin(2 * Math.PI * 50 * t))); aliveEl.loop = true; } aliveEl.play().catch(() => {}); }
+    else if (aliveEl) aliveEl.pause();
+  } catch (e) {}
+}
+/* El mismo pitido como fichero de audio, para cuando la app no está en primer plano (Web Audio puede estar parado) */
+function beepEl(ts){
+  const k = ts.join(',');
+  if (!beepEls[k]) beepEls[k] = new Audio(wavURL(ts[ts.length - 1] + 0.3, t => {
+    const s = ts.find(x => t >= x && t < x + 0.25);
+    return s === undefined ? 0 : 13000 * Math.sin(2 * Math.PI * 880 * t) * Math.min(1, (t - s) / 0.02, (s + 0.25 - t) / 0.05);
+  }));
+  return beepEls[k];
+}
 function unlockAudio(){
   try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); if (audioCtx.state === 'suspended') audioCtx.resume(); } catch (e) {}
+  try { beepEl([0, 0.35, 0.7]); beepEl([0]); } catch (e) {}
 }
 function beep(ts = [0, 0.35, 0.7]){
+  if (document.hidden) { try { const a = beepEl(ts); a.currentTime = 0; a.play().catch(() => {}); } catch (e) {} return; }
   try {
     unlockAudio();
     ts.forEach(t => {
@@ -1074,6 +1104,7 @@ function beep(ts = [0, 0.35, 0.7]){
   } catch (e) {}
 }
 async function keepAwake(on){
+  keepAlive(on);
   try {
     if (on && !wakeLock && navigator.wakeLock) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); }
     else if (!on && wakeLock) { await wakeLock.release(); wakeLock = null; }
@@ -1107,8 +1138,11 @@ function tick(){
   paintRest();
   if (timerId && timerLeft() === 0) {
     clearInterval(timerId); timerId = null;
-    try { if (navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 300]); } catch (e) {}
-    beep(); keepAwake(false);
+    if (Date.now() - timerEnd <= LATE) {
+      try { if (navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 300]); } catch (e) {}
+      beep();
+    }
+    keepAwake(false);
     setTimeout(() => { if (!timerId) { timerEnd = 0; paintRest(); } }, 8000);
   }
 }
@@ -1146,11 +1180,14 @@ function workTick(){
   if (!work) return;
   const now = Date.now();
   if (work.phase === 'prep' && now >= work.prepEnd) {
-    work.phase = 'go'; work.end = now + work.target * 1000;
-    beep([0]); try { if (navigator.vibrate) navigator.vibrate(200); } catch (e) {}
+    work.phase = 'go'; work.end = work.prepEnd + work.target * 1000;
+    if (now - work.prepEnd <= LATE) { beep([0]); try { if (navigator.vibrate) navigator.vibrate(200); } catch (e) {} }
   } else if (work.phase === 'go' && now >= work.end) {
-    try { if (navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 300]); } catch (e) {}
-    beep(); finishWork(work.target); return;
+    if (now - work.end <= LATE) {
+      try { if (navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 300]); } catch (e) {}
+      beep();
+    }
+    finishWork(work.target); return;
   }
   paintRest();
 }
@@ -1162,6 +1199,7 @@ function finishWork(sec){
   it.reps[w.s] = String(Math.max(1, Math.round(sec)));
   if (it.done[w.s]) { saveDrafts(); render(); return; }
   S.active = w.key; markDone(w.i, w.s);
+  if (!timerId && !work) keepAwake(false);
 }
 /* Parar antes de tiempo: se guardan los segundos que de verdad aguantó */
 function stopWork(){
