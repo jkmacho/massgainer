@@ -725,12 +725,13 @@ function entryText(it){
   return w + (it.sets || []).map(fmtNum).join(', ') + u + e;
 }
 /* ---------- Material de casa: pesos que existen de verdad ---------- */
-/* Material de casa. Mancuernas: barra de 2 kg + discos de 1 y 2 kg, iguales a cada lado (2, 4, 6 u 8 kg con las dos).
-   Una kettlebell de 5 kg. Polea: se carga con discos, uno de cada */
-const DEFAULT_GEAR = { mancuernas:[2, 4, 6, 8], kettlebell:[5], polea:[0.5, 1.25, 2.5, 5, 10, 15, 20] };
+/* Material de casa. Mancuernas: barra de 2 kg + discos de 1 y 2 kg (de 2 a 8 kg cada una).
+   Una kettlebell de 5 kg. Barras olímpicas de 20 y 13 kg con sus discos, que también cargan la polea de la jaula */
+const BAR_DISCS = [0.5, 0.5, 1.25, 1.25, 2.5, 2.5, 5, 5, 5, 5, 10, 10, 15, 15, 20, 20];
+const DEFAULT_GEAR = { mancuernas:[2, 3, 4, 5, 6, 7, 8], kettlebell:[5], polea: BAR_DISCS.slice(), barra_olimpica:[13, 20], discos: BAR_DISCS.slice() };
 /* [material, nombre, ayuda, discos]. Con discos se apuntan los discos y los pesos posibles son sus sumas */
 const GEAR = [['mancuernas', 'Mancuernas', 'kg de cada mancuerna'], ['kettlebell', 'Kettlebell', 'kg de cada kettlebell'],
-  ['polea', 'Polea', 'discos que tenéis', true]];
+  ['polea', 'Polea', 'discos que tenéis', true], ['barra_olimpica', 'Barras olímpicas', 'kg de cada barra'], ['discos', 'Discos de barra', 'todos los discos', true]];
 const isDiscs = eq => !!(GEAR.find(g => g[0] === eq) || [])[3];
 function discSums(discs){
   let sums = new Set([0]);
@@ -739,7 +740,16 @@ function discSums(discs){
 }
 const eqOf = id => (LIB.get(id) || {}).eq || null;
 const gearRaw = eq => (Array.isArray(S.gear[eq]) ? S.gear[eq] : []);
-const gearList = eq => isDiscs(eq) ? discSums(gearRaw(eq)) : gearRaw(eq);
+/* Barra: cada barra más parejas de discos iguales, uno a cada lado */
+function barbellWeights(){
+  const bars = gearRaw('barra_olimpica'); if (!bars.length) return [];
+  const cnt = {}; for (const d of gearRaw('discos')) cnt[d] = (cnt[d] || 0) + 1;
+  const side = []; for (const d of Object.keys(cnt)) for (let i = 0; i < Math.floor(cnt[d] / 2); i++) side.push(Number(d));
+  const loads = [0].concat(discSums(side)).map(x => x * 2), out = new Set();
+  for (const b of bars) for (const x of loads) out.add(Math.round((b + x) * 100) / 100);
+  return Array.from(out).sort((a, b) => a - b);
+}
+const gearList = eq => eq === 'barra_olimpica' ? barbellWeights() : isDiscs(eq) ? discSums(gearRaw(eq)) : gearRaw(eq);
 /* "1 2 2,5 3" o "2; 4; 6" o "2,4,6". La coma sola es decimal ("2,5") */
 function parseGear(txt, keepDup){
   const out = [];
@@ -826,7 +836,7 @@ const MUSCLES = [['pecho', 'Pecho'], ['hombro', 'Hombro'], ['biceps', 'Bíceps']
   ['trapecio', 'Trapecio'], ['dorsal', 'Dorsal'], ['espalda', 'Espalda media'], ['lumbar', 'Lumbar'], ['gluteo', 'Glúteo'], ['cuadriceps', 'Cuádriceps'],
   ['isquios', 'Isquios'], ['aductor', 'Aductores'], ['abductor', 'Abductores'], ['gemelo', 'Gemelos'], ['cardio', 'Cardio']];
 const MNAME = Object.fromEntries(MUSCLES);
-const EQUIP = [['mancuernas', 'Mancuernas'], ['kettlebell', 'Kettlebell'], ['polea', 'Polea'], ['barra', 'Barra'], ['corporal', 'Peso corporal']];
+const EQUIP = [['mancuernas', 'Mancuernas'], ['kettlebell', 'Kettlebell'], ['polea', 'Polea'], ['barra_olimpica', 'Barra olímpica'], ['barra', 'Barra de dominadas'], ['corporal', 'Peso corporal']];
 const EQNAME = Object.assign({ otro:'Otro' }, Object.fromEntries(EQUIP));
 /* Los del catálogo de siempre conservan sus series, rangos y notas; los nuevos llevan unos de partida */
 const LIB = new Map();
@@ -1573,9 +1583,11 @@ function viewPlan(){
 function viewGear(){
   const rows = GEAR.map(g => {
     const l = gearRaw(g[0]), dr = S.gearDraft[g[0]];
-    const sums = g[3] && l.length ? gearList(g[0]) : [], low = sums.filter(x => x <= 10);
+    const bw = g[0] === 'discos' ? barbellWeights() : [];
+    const sums = g[3] && g[0] !== 'discos' && l.length ? gearList(g[0]) : [], low = sums.filter(x => x <= 10);
     return '<label>' + g[1] + ' <span class="muted">(' + g[2] + ')</span><input type="text" inputmode="decimal" placeholder="Ej.: 1 2 3 4 5" style="display:block;width:100%;margin-top:4px" data-key="gear-' + g[0] + '" data-act="gear" data-v="' + g[0] + '" value="' + esc(dr != null ? dr : gearText(l)) + '"></label>' +
-      (g[3] ? '<p class="small muted">Si hay dos discos iguales, escríbelo dos veces.' + (sums.length ? ' Se pueden poner ' + sums.length + ' pesos distintos. Hasta 10 kg: ' + esc(low.map(fmtNum).join(', ')) + ' kg.' : '') + '</p>' : '');
+      (g[0] === 'discos' ? '<p class="small muted">Si hay dos discos iguales, escríbelo dos veces. En la barra van por parejas, uno a cada lado.' + (bw.length ? ' Con las barras se pueden montar ' + bw.length + ' pesos, de ' + fmtNum(bw[0]) + ' a ' + fmtNum(bw[bw.length - 1]) + ' kg.' : '') + '</p>'
+      : g[3] ? '<p class="small muted">Si hay dos discos iguales, escríbelo dos veces.' + (sums.length ? ' Se pueden poner ' + sums.length + ' pesos distintos. Hasta 10 kg: ' + esc(low.map(fmtNum).join(', ')) + ' kg.' : '') + '</p>' : '');
   }).join('');
   return '<h2 class="section-title">Material de casa</h2><section class="card">' +
     '<p class="small">Apunta los pesos que tenéis, separados por espacios (2,5 con coma). Al subir de peso, el diario solo propondrá pesos que se puedan montar.</p>' + rows +
