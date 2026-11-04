@@ -562,6 +562,13 @@ const newId = () => (window.crypto && crypto.randomUUID) ? crypto.randomUUID() :
 const PROFILES = [['eric', 'Eric'], ['juan', 'Juan']];
 let PROFILE = null;
 const isEric = () => PROFILE === 'eric';
+/* Último perfil usado: si se vuelve a la app antes de 3 horas (p. ej. tras poner música), entra directo */
+const LAST_KEY = 'diarioEric:lastProfile', RESUME_MS = 3 * 3600 * 1000;
+function rememberProfile(){ if (!PROFILE) return; try { localStorage.setItem(LAST_KEY, JSON.stringify({ id: PROFILE, t: Date.now() })); } catch (e) {} }
+function forgetProfile(){ try { localStorage.removeItem(LAST_KEY); } catch (e) {} }
+function lastProfile(){
+  try { const l = JSON.parse(localStorage.getItem(LAST_KEY) || 'null'); return l && Date.now() - l.t < RESUME_MS && PROFILES.some(p => p[0] === l.id) ? l.id : null; } catch (e) { return null; }
+}
 const profileName = () => (PROFILES.find(p => p[0] === PROFILE) || ['', ''])[1];
 const SHARED_KEYS = ['gear', 'restSec'];
 const lsKey = k => 'diarioEric:' + (PROFILE && PROFILE !== 'eric' && SHARED_KEYS.indexOf(k) < 0 ? PROFILE + ':' : '') + k;
@@ -1182,7 +1189,8 @@ async function keepAwake(on){
     else if (!on && wakeLock) { await wakeLock.release(); wakeLock = null; }
   } catch (e) { wakeLock = null; }
 }
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && timerId) keepAwake(true); });
+document.addEventListener('visibilitychange', () => { rememberProfile(); if (document.visibilityState === 'visible' && timerId) keepAwake(true); });
+setInterval(rememberProfile, 60000);
 function paintRest(){
   const bar = document.getElementById('restbar');
   document.body.classList.toggle('resting', !!timerEnd || !!work);
@@ -1800,7 +1808,7 @@ function viewProfiles(){
 }
 function chooseProfile(id){
   if (!PROFILES.some(p => p[0] === id)) return;
-  PROFILE = id; S.tab = 'train';
+  PROFILE = id; S.tab = 'train'; rememberProfile();
   restoreDrafts(); render(); store.init();
 }
 function view(){
@@ -2092,7 +2100,7 @@ function onClick(act, ds){
     case 'fi-photo-del': store.saveFicha(Object.assign({}, S.ficha, { photo:null })).then(render, () => toast('No se ha podido quitar')); break;
     case 'fi-add': addMedidaAction(); break;
     case 'fi-del': delMedidaAction(ds.v); break;
-    case 'profile-change': if (timerId || work) { toast('Termina o salta el descanso antes de cambiar de perfil'); break; } location.reload(); break;
+    case 'profile-change': if (timerId || work) { toast('Termina o salta el descanso antes de cambiar de perfil'); break; } forgetProfile(); PROFILE = null; location.reload(); break;
     case 'tab': S.tab = ds.v; S.confirmDel = null; S.confirmReset = false; S.confirmPhase = null; S.confirmDiscard = false; render(); window.scrollTo(0, 0); break;
     case 'session': S.active = ds.v; S.confirmDiscard = false; render(); break;
     case 'pk-open': {
@@ -2254,7 +2262,7 @@ setInterval(() => {
   if (el && d && d.startedAt) el.textContent = clockText(Date.now() - d.startedAt);
 }, 1000);
 
-render();
+{ const lp = lastProfile(); if (lp) chooseProfile(lp); else render(); }
 S.canDownload = true;
 /* PWA: pedir que el navegador no borre los datos y registrar el service worker */
 try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
