@@ -845,7 +845,7 @@ const ICON = {
   history: svg('<path d="M9 6h12M9 12h12M9 18h12"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/>'),
   progress: svg('<path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 6-7"/>'),
   tests: svg('<circle cx="12" cy="13.5" r="7.5"/><path d="M12 10v3.5l2.5 2M9.5 2.5h5"/>'),
-  plan: svg('<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 3h6v3H9zM9 11h6M9 15h4"/>'),
+  plan: svg('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>'),
   play: svg('<path d="M8 5.5v13l11-6.5z" fill="currentColor"/>'),
   check: svg('<path d="M5 12.5l4.5 4.5L19 7.5"/>', ' stroke-width="2.6"'),
   clock: svg('<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9.5 2.5h5"/>'),
@@ -1398,7 +1398,7 @@ function viewTrain(){
   const anyDone = d.items.some(it => it.done.some(Boolean));
   const addBox = '<div class="row"><button class="btn-soft" data-act="pk-open" data-v="train">+ Añadir ejercicio</button>' +
       (k === 'L' && d.items.length && !anyDone ? '<button class="btn-text muted" data-act="clear-free">Vaciar y elegir yo los ejercicios</button>' : '') + '</div>';
-  const emptyTxt = k === 'L' ? '<p class="empty">Sesión vacía. Añade los ejercicios que quieras hacer hoy.</p>' : '<p class="empty">Esta sesión no tiene ejercicios. Añádelos en Plan.</p>';
+  const emptyTxt = k === 'L' ? '<p class="empty">Sesión vacía. Añade los ejercicios que quieras hacer hoy.</p>' : '<p class="empty">Esta sesión no tiene ejercicios. Añádelos en Ajustes, en Ejercicios de cada sesión.</p>';
   return header('Entrenar', trainMeta()) + '<div class="sessions three" role="group" aria-label="Sesión">' + seg + '</div>' + restNote + status + presets +
     (items || emptyTxt) + addBox + finish;
 }
@@ -1741,7 +1741,7 @@ function viewPlan(){
   } else {
     phaseBox = '<section class="card"><p class="small muted">Todas las fases del plan están aplicadas.</p>' + (S.prevCfg && S.prevCfg.phase ? '<button class="btn-text muted" data-act="phase-undo">Deshacer el paso a la fase ' + S.prevCfg.phase + '</button>' : '') + '</section>';
   }
-  return header('Plan') + viewPerfil() +
+  return header('Ajustes') + viewPerfil() +
     (isEric() ? '<h2 class="section-title">' + (season > SEASON0 ? 'Temporada' : 'Cambio de fase') + '</h2>' + phaseBox +
     '<h2 class="section-title">Fases de la temporada ' + seasonName(season) + '</h2><section class="card"><ul class="phases">' + phases + '</ul></section>' : '') +
     '<h2 class="section-title">Cómo subir peso</h2><section class="card"><ul class="guide">' +
@@ -1790,7 +1790,7 @@ function viewBackup(){
     '<input type="file" id="import-file" accept=".json,.txt,application/json,text/plain" data-act="import-file" hidden></div>' + confirm + '</section>';
 }
 
-const TABS = [['train', 'Entrenar'], ['history', 'Historial'], ['progress', 'Progreso'], ['tests', 'Pruebas'], ['rm', 'RM'], ['plan', 'Plan']];
+const TABS = [['train', 'Entrenar'], ['history', 'Historial'], ['progress', 'Progreso'], ['tests', 'Pruebas'], ['rm', 'RM'], ['plan', 'Ajustes']];
 function nav(){
   return '<nav class="nav" aria-label="Secciones"><div class="nav-in">' + TABS.map(t => '<button data-act="tab" data-v="' + t[0] + '"' + (S.tab === t[0] ? ' aria-current="page"' : '') + '>' + ICON[t[0]] + '<span>' + t[1] + '</span></button>').join('') + '</div></nav>';
 }
