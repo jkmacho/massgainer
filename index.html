@@ -826,6 +826,7 @@ function suggest(it, last){
 /* ---------- Iconos (trazo, heredan el color) ---------- */
 const svg = (d, extra) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"' + (extra || '') + '>' + d + '</svg>';
 const ICON = {
+  rm: svg('<path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M9 20h6"/>'),
   train: svg('<path d="M6 7v10M3 9.5v5M18 7v10M21 9.5v5M6 12h12"/>'),
   history: svg('<path d="M9 6h12M9 12h12M9 18h12"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/>'),
   progress: svg('<path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 6-7"/>'),
@@ -1288,7 +1289,7 @@ function trainMeta(){
   const t = todayISO(), wk = weekCount();
   if (!isEric()) return 'Esta semana: ' + wk + ' ' + (wk === 1 ? 'sesión' : 'sesiones') + '.';
   const cp = upcomingCp();
-  let m = 'Esta semana: ' + wk + ' de 2-3 sesiones.';
+  let m = 'Esta semana: ' + wk + ' de 2 sesiones.';
   if (cp) m += cp.date <= t ? ' Tocan las pruebas de ' + cp.label.toLowerCase() + '.' : ' Próximas pruebas: semana del ' + fmtDate(cp.date) + '.';
   return m;
 }
@@ -1546,6 +1547,68 @@ function viewTests(){
     '<section class="card">' + cmpTests + cmpW + '</section>';
 }
 
+/* ---------- RM (perfiles adultos) ----------
+   1RM estimado con Epley, peso × (1 + reps / 30), solo con series de 1 a 12 reps. El RM real se apunta a mano
+   y se guarda en S.tests.rm[id] = [{ date, w }] */
+const RM_MAXREPS = 12;
+const epley = (w, r) => r === 1 ? w : w * (1 + r / 30);
+const rmLoad = (rm, r) => r === 1 ? rm : rm / (1 + r / 30);
+function rmData(){
+  const out = new Map();
+  for (const s of sortedAsc()) for (const it of (s.items || [])) {
+    if (it.kind === 'time') continue;
+    const ws = setWeights(it); let day = 0;
+    (it.sets || []).forEach((r, i) => { const w = ws[i]; if (w > 0 && r >= 1 && r <= RM_MAXREPS) day = Math.max(day, epley(w, r)); });
+    if (!day) continue;
+    const e = out.get(it.id) || { id: it.id, name: it.name, best: null, last: null };
+    e.name = it.name; e.last = { v: day, date: s.date };
+    if (!e.best || day > e.best.v) e.best = { v: day, date: s.date };
+    out.set(it.id, e);
+  }
+  return out;
+}
+const rmReal = id => { const l = (S.tests.rm || {})[id]; return Array.isArray(l) && l.length ? l[l.length - 1] : null; };
+/* Peso montable más cercano por debajo; sin lista de material, redondeo a 0,5 kg */
+function rmRound(id, kg){
+  const l = gearList(eqOf(id)); if (!l.length) return Math.floor(kg * 2) / 2;
+  const ok = l.filter(g => g <= kg + 1e-9); return ok.length ? ok[ok.length - 1] : l[0];
+}
+function viewRM(){
+  if (!ready()) return header('RM') + '<p class="empty">Cargando…</p>';
+  const data = rmData(), order = [];
+  for (const k of KEYS) for (const t of (S.templates[k] || [])) if (data.has(t.id) && order.indexOf(t.id) < 0) order.push(t.id);
+  const plan = order.length;
+  Array.from(data.values()).filter(e => order.indexOf(e.id) < 0).sort((a, b) => b.best.v - a.best.v).forEach(e => order.push(e.id));
+  for (const id of Object.keys(S.tests.rm || {})) if (order.indexOf(id) < 0) order.push(id);
+  if (!order.length) return header('RM', 'Aún no hay series con peso para calcularlo.');
+  const card = id => {
+    const e = data.get(id), real = rmReal(id), name = e ? e.name : exName(id);
+    const useReal = real && (!e || real.date >= e.last.date), base = useReal ? real.w : e.last.v;
+    const loads = [1, 3, 5, 8, 10].map(r => '<span class="cell-cmp"><small>' + r + (r === 1 ? ' rep' : ' reps') + '</small><b>' + fmtNum(rmRound(id, rmLoad(base, r))) + '</b></span>').join('');
+    return '<section class="card"><h3 class="sub">' + esc(name) + '</h3>' +
+      '<div class="stats">' +
+        '<div class="stat"><b class="sm">' + (e ? fmtNum(Math.round(e.last.v * 2) / 2) + ' kg' : '—') + '</b><small>estimado ahora' + (e ? ' (' + esc(fmtDate(e.last.date)) + ')' : '') + '</small></div>' +
+        '<div class="stat"><b class="sm">' + (e ? fmtNum(Math.round(e.best.v * 2) / 2) + ' kg' : '—') + '</b><small>mejor estimado' + (e ? ' (' + esc(fmtDate(e.best.date)) + ' ' + e.best.date.slice(2, 4) + ')' : '') + '</small></div>' +
+        '<div class="stat"><b class="sm">' + (real ? fmtNum(real.w) + ' kg' : '—') + '</b><small>RM real' + (real ? ' (' + esc(fmtDate(real.date)) + ')' : '') + '</small></div>' +
+      '</div>' +
+      '<p class="small muted">Peso para cada número de reps, según el ' + (useReal ? 'RM real' : 'estimado de la última sesión') + ' y redondeado a lo que se puede montar:</p>' +
+      '<div class="cmp-cells">' + loads + '</div>' +
+      '<div class="row"><input type="text" inputmode="decimal" style="flex:1;min-width:0" placeholder="RM real en kg" aria-label="RM real de ' + esc(name) + ' en kg" data-key="rm-' + esc(id) + '" id="rm-' + esc(id) + '"><button class="btn-soft" data-act="rm-save" data-v="' + esc(id) + '">Apuntar</button></div>' +
+    '</section>';
+  };
+  return header('RM', 'El 1RM estimado sale de tus series de hasta ' + RM_MAXREPS + ' reps (fórmula de Epley). Es orientativo: para un RM real, calienta bien, usa los topes de la jaula y que alguien te ayude.') +
+    (plan ? '<h2 class="section-title">Ejercicios del plan</h2>' : '') + order.slice(0, plan).map(card).join('') +
+    (order.length > plan ? '<h2 class="section-title">Otros ejercicios</h2>' + order.slice(plan).map(card).join('') : '');
+}
+async function saveRmAction(id){
+  const el = document.getElementById('rm-' + id), w = num(el ? el.value : null);
+  if (!(w > 0) || w > 500) { toast('Escribe el peso en kg'); return; }
+  const next = clone(S.tests); next.rm = next.rm || {}; next.rm[id] = (next.rm[id] || []).concat([{ date: todayISO(), w }]);
+  try { await store.saveTests(next); toast('RM de ' + fmtNum(w) + ' kg apuntado'); }
+  catch (e) { toast('No se ha guardado: ' + ((e && e.message) || 'inténtalo de nuevo')); }
+  render();
+}
+
 function ensureEdit(){
   if (!S.edit) S.edit = { key:'A', tpl: clone(S.templates), dirty:false };
   else if (!S.edit.dirty) S.edit.tpl = clone(S.templates);
@@ -1643,9 +1706,9 @@ function viewBackup(){
     '<input type="file" id="import-file" accept=".json,.txt,application/json,text/plain" data-act="import-file" hidden></div>' + confirm + '</section>';
 }
 
-const TABS = [['train', 'Entrenar'], ['history', 'Historial'], ['progress', 'Progreso'], ['tests', 'Pruebas'], ['plan', 'Plan']];
+const TABS = [['train', 'Entrenar'], ['history', 'Historial'], ['progress', 'Progreso'], ['tests', 'Pruebas'], ['rm', 'RM'], ['plan', 'Plan']];
 function nav(){
-  return '<nav class="nav" aria-label="Secciones"><div class="nav-in">' + TABS.filter(t => isEric() || t[0] !== 'tests').map(t => '<button data-act="tab" data-v="' + t[0] + '"' + (S.tab === t[0] ? ' aria-current="page"' : '') + '>' + ICON[t[0]] + '<span>' + t[1] + '</span></button>').join('') + '</div></nav>';
+  return '<nav class="nav" aria-label="Secciones"><div class="nav-in">' + TABS.filter(t => t[0] !== (isEric() ? 'rm' : 'tests')).map(t => '<button data-act="tab" data-v="' + t[0] + '"' + (S.tab === t[0] ? ' aria-current="page"' : '') + '>' + ICON[t[0]] + '<span>' + t[1] + '</span></button>').join('') + '</div></nav>';
 }
 function viewProfiles(){
   return '<header class="top"><p class="eyebrow">Diario de fuerza</p><h1>¿Quién entrena?</h1></header>' +
@@ -1660,7 +1723,7 @@ function view(){
   if (!PROFILE) return viewProfiles();
   if (!S.templates.L) S.templates.L = clone(DEFAULT_TEMPLATES.L); // configuraciones guardadas antes de existir la Libre
   registerCustom();
-  const body = { train:viewTrain, history:viewHistory, progress:viewProgress, tests:viewTests, plan:viewPlan }[S.tab]();
+  const body = { train:viewTrain, history:viewHistory, progress:viewProgress, tests:viewTests, rm:viewRM, plan:viewPlan }[S.tab]();
   const sheets = (S.pick ? viewPicker() : '') + (S.fx ? viewFicha() : '');
   return body + viewRest() + nav() + sheets + '<div id="toast" class="toast' + (S.toast ? ' show' : '') + '" role="status" aria-live="polite">' + esc(S.toast) + '</div>';
 }
@@ -1939,6 +2002,7 @@ function markDone(i, s){
 function onClick(act, ds){
   switch (act) {
     case 'profile': chooseProfile(ds.v); break;
+    case 'rm-save': saveRmAction(ds.v); break;
     case 'profile-change': if (timerId || work) { toast('Termina o salta el descanso antes de cambiar de perfil'); break; } location.reload(); break;
     case 'tab': S.tab = ds.v; S.confirmDel = null; S.confirmReset = false; S.confirmPhase = null; S.confirmDiscard = false; render(); window.scrollTo(0, 0); break;
     case 'session': S.active = ds.v; S.confirmDiscard = false; render(); break;
