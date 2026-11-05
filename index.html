@@ -174,6 +174,15 @@ h1{ font-family:var(--display); font-weight:700; font-size:38px; line-height:1; 
 
 /* Historial */
 .hist-top{ display:flex; align-items:center; gap:12px; }
+.cal-t{ font-family:var(--display); font-size:20px; text-transform:capitalize; }
+.cal-g{ display:grid; grid-template-columns:repeat(7, minmax(0, 1fr)); gap:4px; }
+.cal-h{ text-align:center; font-size:12px; color:var(--muted); }
+.cal-d{ min-height:44px; border-radius:10px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; font-size:14px; color:var(--muted); background:none; border:1px solid transparent; padding:0; font-variant-numeric:tabular-nums; }
+.cal-d.empty{ visibility:hidden; }
+.cal-d.on{ background:var(--accent-soft); color:var(--text); cursor:pointer; }
+.cal-d.on b{ font-family:var(--display); font-size:15px; line-height:1; color:var(--accent); }
+.cal-d.today{ border-color:var(--accent); }
+.card[id^="h-"]{ scroll-margin-top:12px; }
 .badge-k{ flex-shrink:0; width:40px; height:40px; border-radius:10px; display:grid; place-items:center; background:var(--accent-soft); color:var(--accent); font-family:var(--display); font-weight:700; font-size:24px; }
 .hist-top h3{ font-size:17px; }
 .hist-top h3::first-letter{ text-transform:uppercase; }
@@ -337,6 +346,11 @@ label.sub{ font-weight:700; }
 .key.l1{ opacity:.3; } .key.l2{ opacity:.62; }
 .ex-rest{ display:flex; align-items:center; gap:6px; margin-top:-4px; font-size:14px; color:var(--muted); }
 .ex-rest svg{ width:16px; height:16px; color:var(--accent); }
+.ex-ss{ margin-top:-4px; font-size:14px; color:var(--muted); }
+.ex-ss b{ color:var(--text); }
+.card.ss-a, .card.ss-b{ border-left:4px solid var(--accent); }
+.card.ss-a{ border-bottom-left-radius:4px; border-bottom-right-radius:4px; }
+.card.ss-b{ border-top-left-radius:4px; border-top-right-radius:4px; }
 .erow-top{ display:flex; align-items:center; gap:10px; }
 .erow-top input{ flex:1; min-width:0; font-weight:700; }
 .erow-top .ex-thumb{ width:58px; height:44px; }
@@ -396,7 +410,6 @@ function cpsOf(y){
 }
 /* Todas las semanas de pruebas desde la primera temporada hasta la actual */
 function allCps(){ const out = []; for (let y = SEASON0; y <= seasonOf(todayISO()); y++) out.push(...cpsOf(y)); return out; }
-const PHASES = phasesOf(SEASON0);
 const TESTS = [
   { id:'flex',    name:'Flexiones en la barra, altura fija', unit:'reps', hint:'Agujero de la barra, pies…' },
   { id:'remoinv', name:'Remo invertido en la barra, altura fija', unit:'reps', hint:'Agujero de la barra, pies…' },
@@ -527,15 +540,51 @@ const PHASE_CHANGES = {
       'Los ejercicios principales siguen a 6-10 repeticiones.'
     ],
     apply(t){
-      const jump = () => ({ id:'saltos_cajon', name:'Saltos al cajón', kind:'reps', sets:3, min:5, max:5, weight:0, step:0, note:'Cajón bajo, caer suave; justo después del calentamiento' });
-      addTop(t.A, jump()); addTop(t.B, jump());
+      addTop(t.A, jumpEx()); addTop(t.B, jumpEx());
       setRange(t.A, ['goblet', 'press_incl'], 3, 6, 10);
       setRange(t.B, ['rdl', 'jalon'], 3, 6, 10);
     }
   }
 };
-const maxApplied = () => S.phasesApplied.reduce((m, n) => Math.max(m, n), 1);
-const nextPhaseToApply = () => { const n = maxApplied() + 1; return PHASE_CHANGES[n] ? PHASES.find(p => p.n === n) : null; };
+/* Temporadas siguientes: cada fase pone los básicos en su rango; los saltos entran en primavera y salen en otoño */
+const MAIN_IDS = { A:['goblet', 'press_incl'], B:['rdl', 'jalon'] };
+const jumpEx = () => ({ id:'saltos_cajon', name:'Saltos al cajón', kind:'reps', sets:3, min:5, max:5, weight:0, step:0, note:'Cajón bajo, caer suave; justo después del calentamiento' });
+function delEx(list, id){ const i = idxOf(list, id); if (i >= 0) list.splice(i, 1); }
+const NEXT_CHANGES = {
+  1: {
+    summary: [
+      'Vuelta tras el verano: sentadilla goblet, press inclinado, remo en banco, peso muerto rumano y jalón a 3 × 10-12.',
+      'Si con el peso de junio no llega a 10 repeticiones, que baje un poco y vuelva a subir desde ahí.',
+      'Salen los saltos al cajón hasta la primavera.'
+    ],
+    apply(t){ delEx(t.A, 'saltos_cajon'); delEx(t.B, 'saltos_cajon'); setRange(t.A, MAIN_IDS.A.concat(['remo_banco']), 3, 10, 12); setRange(t.B, MAIN_IDS.B, 3, 10, 12); }
+  },
+  2: {
+    summary: ['Sentadilla goblet, press inclinado, remo en banco, peso muerto rumano y jalón a 3 × 8-12.'],
+    apply(t){ setRange(t.A, MAIN_IDS.A.concat(['remo_banco']), 3, 8, 12); setRange(t.B, MAIN_IDS.B, 3, 8, 12); }
+  },
+  3: {
+    summary: ['Sentadilla goblet, press inclinado, peso muerto rumano y jalón a 3 × 6-10, así que el diario propondrá subir algo de peso.'],
+    apply(t){ setRange(t.A, MAIN_IDS.A, 3, 6, 10); setRange(t.B, MAIN_IDS.B, 3, 6, 10); }
+  },
+  4: {
+    summary: ['Saltos al cajón al principio de las dos sesiones, 3 series de 5.', 'Los básicos siguen a 6-10 repeticiones.'],
+    apply(t){ addTop(t.A, jumpEx()); addTop(t.B, jumpEx()); setRange(t.A, MAIN_IDS.A, 3, 6, 10); setRange(t.B, MAIN_IDS.B, 3, 6, 10); }
+  }
+};
+/* La temporada 2026-27 guarda las fases como número (2, 3, 4); las siguientes como "año:fase" */
+const phaseKey = (y, n) => y === SEASON0 ? n : y + ':' + n;
+const changesFor = (y, n) => (y === SEASON0 ? PHASE_CHANGES : NEXT_CHANGES)[n] || null;
+const maxApplied = () => S.phasesApplied.reduce((m, n) => typeof n === 'number' ? Math.max(m, n) : m, 1);
+const isApplied = (y, n) => y === SEASON0 ? n <= maxApplied() : S.phasesApplied.indexOf(phaseKey(y, n)) >= 0;
+/* La fase en curso si falta aplicarla; si no, la siguiente que falte (se puede adelantar) */
+function nextPhaseToApply(y){
+  if (y === SEASON0) { const n = maxApplied() + 1; return PHASE_CHANGES[n] ? phasesOf(y).find(p => p.n === n) : null; }
+  const t = todayISO(), ps = phasesOf(y).filter(p => NEXT_CHANGES[p.n]);
+  const cur = ps.filter(p => p.start <= t).pop();
+  if (cur && !isApplied(y, cur.n)) return cur;
+  return ps.find(p => p.start > t && !isApplied(y, p.n)) || null;
+}
 const EFF = { facil:'fácil', justo:'justo', duro:'duro' };
 
 /* ---------- Utilidades ---------- */
@@ -768,9 +817,9 @@ function entryText(it){
 /* Material de casa. Mancuernas: barra de 2 kg + discos de 1 y 2 kg (de 2 a 8 kg cada una).
    Una kettlebell de 5 kg. Barras olímpicas de 20 y 13 kg con sus discos, que también cargan la polea de la jaula */
 const BAR_DISCS = [0.5, 0.5, 1.25, 1.25, 2.5, 2.5, 5, 5, 5, 5, 10, 10, 15, 15, 20, 20];
-const DEFAULT_GEAR = { mancuernas:[2, 3, 4, 5, 6, 7, 8], kettlebell:[5], polea: BAR_DISCS.slice(), barra_olimpica:[13, 20], discos: BAR_DISCS.slice() };
+const DEFAULT_GEAR = { mancuernas:[2, 3, 4, 5, 6, 7, 8], mancuerna:[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14], kettlebell:[5], polea: BAR_DISCS.slice(), barra_olimpica:[13, 20], discos: BAR_DISCS.slice() };
 /* [material, nombre, ayuda, discos]. Con discos se apuntan los discos y los pesos posibles son sus sumas */
-const GEAR = [['mancuernas', 'Mancuernas', 'kg de cada mancuerna'], ['kettlebell', 'Kettlebell', 'kg de cada kettlebell'],
+const GEAR = [['mancuernas', 'Mancuernas', 'kg de cada mancuerna'], ['mancuerna', 'Una sola mancuerna', 'kg montando una con todos los discos'], ['kettlebell', 'Kettlebell', 'kg de cada kettlebell'],
   ['polea', 'Polea', 'discos que tenéis', true], ['barra_olimpica', 'Barras olímpicas', 'kg de cada barra'], ['discos', 'Discos de barra', 'todos los discos', true]];
 const isDiscs = eq => !!(GEAR.find(g => g[0] === eq) || [])[3];
 function discSums(discs){
@@ -778,8 +827,10 @@ function discSums(discs){
   for (const d of discs) { const next = new Set(sums); for (const x of sums) { const v = Math.round((x + d) * 100) / 100; if (v <= 200) next.add(v); } sums = next; }
   sums.delete(0); return Array.from(sums).sort((a, b) => a - b);
 }
-const eqOf = id => (LIB.get(id) || {}).eq || null;
-const gearRaw = eq => (Array.isArray(S.gear[eq]) ? S.gear[eq] : []);
+/* Ejercicios con una sola mancuerna: pueden llevar todos los discos (lista "mancuerna"; si está vacía, la de mancuernas) */
+const ONE_DB = new Set(['goblet', 'remo_banco', 'pullover', 'triceps_nuca_manc', 'triceps_nuca_unilat', 'sentadilla_sumo', 'incl_lateral', 'press_banca_unilat', 'curl_concentrado']);
+const eqOf = id => ONE_DB.has(id) ? 'mancuerna' : (LIB.get(id) || {}).eq || null;
+const gearRaw = eq => (Array.isArray(S.gear[eq]) ? S.gear[eq] : eq === 'mancuerna' ? gearRaw('mancuernas') : []);
 /* Barra: cada barra más parejas de discos iguales, uno a cada lado */
 function barbellWeights(){
   const bars = gearRaw('barra_olimpica'); if (!bars.length) return [];
@@ -864,7 +915,7 @@ function draftItem(t){
   const last = lastEntry(t.id);
   const w = last && last.item.weight != null ? last.item.weight : t.weight;
   const n = Number(t.sets) || 3, wTxt = w == null ? '' : fmtNum(w);
-  return { id:t.id, name:t.name, kind:t.kind, n, min:Number(t.min), max:Number(t.max), step:Number(t.step) || 0, note:t.note || '', rest:Number(t.rest) || 0,
+  return { id:t.id, name:t.name, kind:t.kind, n, min:Number(t.min), max:Number(t.max), step:Number(t.step) || 0, note:t.note || '', rest:Number(t.rest) || 0, ss: !!t.ss,
     weight: wTxt, reps: Array.from({ length:n }, () => ''), setW: Array.from({ length:n }, () => wTxt), done: Array.from({ length:n }, () => false), effort:null, skip:false };
 }
 function buildDraft(k){
@@ -988,13 +1039,14 @@ async function swapItem(id){
   if (!e || !it || it.id !== p.from) return;
   if (it.done.some(Boolean)) { toast('Ya tiene series hechas; añade el otro en vez de cambiarlo'); return; }
   if (d.items.some(x => x.id === id)) return;
-  d.items[p.i] = draftItem(e); saveDrafts();
+  d.items[p.i] = draftItem(e); if (it.ss) d.items[p.i].ss = true; saveDrafts();
   if (!p.forever) { toast(it.name + ' cambiado por ' + e.name + ' solo hoy'); return; }
   /* Para siempre: también en el plan de la sesión, en el mismo sitio y con el mismo descanso */
   const t = clone(S.templates), l = t[d.session] || [], j = idxOf(l, it.id);
   if (j < 0 || idxOf(l, id) >= 0) { toast(it.name + ' cambiado por ' + e.name + ' solo hoy (no estaba en el plan)'); return; }
   const nx = { id:e.id, name:e.name, kind:e.kind, sets:e.sets, min:e.min, max:e.max, weight:e.weight, step:e.step, note:e.note || '' };
   if (l[j].rest) nx.rest = l[j].rest;
+  if (l[j].ss) nx.ss = true;
   l.splice(j, 1, nx);
   try {
     await store.saveConfig({ templates: t, phasesApplied: S.phasesApplied, prev: S.prevCfg });
@@ -1302,8 +1354,9 @@ function header(title, meta){
     ' <button class="btn-text who" data-act="profile-change">Cambiar</button>';
   let notice = '';
   if (S.dbError) notice = '<p class="notice warn">' + esc(S.dbError) + '</p>';
-  else if (ready() && ph && ph.season > SEASON0 && ph.n === 1 && t <= addDays(ph.start, 14) && S.tab !== 'plan') notice = '<p class="notice">Empieza la temporada ' + seasonName(ph.season) + '. Buen momento para revisar el plan.<button class="btn-text" data-act="tab" data-v="plan">Ver plan</button></p>';
-  else if (ready() && ph && ph.season === SEASON0 && !ph.summer && ph.n >= 2 && maxApplied() < ph.n && S.tab !== 'plan') notice = '<p class="notice warn">Ya estáis en la fase ' + ph.n + ' y los ejercicios siguen en la anterior.<button class="btn-text" data-act="tab" data-v="plan">Pasar de fase</button></p>';
+  else if (ready() && ph && !ph.summer && changesFor(ph.season, ph.n) && !isApplied(ph.season, ph.n) && S.tab !== 'plan') notice = ph.n === 1
+    ? '<p class="notice">Empieza la temporada ' + seasonName(ph.season) + '. Buen momento para revisar el plan y pasar a la fase 1.<button class="btn-text" data-act="tab" data-v="plan">Ver plan</button></p>'
+    : '<p class="notice warn">Ya estáis en la fase ' + ph.n + ' y los ejercicios siguen en la anterior.<button class="btn-text" data-act="tab" data-v="plan">Pasar de fase</button></p>';
   else if (store.mode === 'local' && S.sessions.length && backupDue() && S.tab !== 'plan') notice = '<p class="notice">Hace más de un mes que no se hace una copia.<button class="btn-text" data-act="tab" data-v="plan">Hacer copia</button></p>';
   return '<header class="top"><p class="eyebrow">' + eyebrow + '</p><h1>' + esc(title) + '</h1>' + (meta ? '<p class="meta">' + meta + '</p>' : '') + notice + '</header>';
 }
@@ -1339,11 +1392,15 @@ function viewEx(it, i, k){
       '<button class="check" data-act="done" data-i="' + i + '" data-s="' + s + '" aria-pressed="' + !!it.done[s] + '" aria-label="Serie ' + (s + 1) + ' hecha">' + ICON.check + '</button></div>';
   }).join('');
   const canDel = it.reps.length > 1 && !it.done[it.reps.length - 1];
+  const sib = ((S.drafts[k] || {}).items || []), nx = sib[i + 1], pv = sib[i - 1];
+  const ssA = it.ss && nx && !nx.skip, ssB = pv && pv.ss && !pv.skip;
+  const ssTxt = ssA ? '<p class="ex-ss">Superserie con <b>' + esc(nx.name) + '</b>: al acabar cada serie, sin descanso, la misma serie del otro.</p>'
+    : ssB ? '<p class="ex-ss">Superserie con <b>' + esc(pv.name) + '</b>: el descanso va después de cada serie de este.</p>' : '';
   const eff = [['facil', 'Fácil'], ['justo', 'Justo'], ['duro', 'Duro']].map(p => '<button class="chip chip-' + p[0] + '" data-act="effort" data-i="' + i + '" data-v="' + p[0] + '" aria-pressed="' + (it.effort === p[0]) + '">' + p[1] + '</button>').join('');
-  return '<section class="card ex' + (allDone ? ' is-done' : '') + '">' +
+  return '<section class="card ex' + (allDone ? ' is-done' : '') + (ssA ? ' ss-a' : '') + (ssB ? ' ss-b' : '') + '">' +
     '<div class="ex-top"><h3><button class="ex-name" data-act="fx-open" data-v="' + esc(it.id) + '">' + thumb(it.id, 'ex-thumb') + '<span>' + esc(it.name) + '</span></button></h3><span class="tag">' + (allDone ? '✓ ' : '') + it.n + ' × ' + range + (isTime ? ' s' : '') + '</span></div>' +
     (it.note ? '<p class="ex-note">' + esc(it.note) + '</p>' : '') +
-    (it.rest && it.rest !== S.restSec ? '<p class="ex-rest">' + ICON.clock + 'Descanso ' + restLabel(it.rest) + '</p>' : '') + exNotesView(it, i, k, last) +
+    ssTxt + (it.rest && it.rest !== S.restSec ? '<p class="ex-rest">' + ICON.clock + 'Descanso ' + restLabel(it.rest) + '</p>' : '') + exNotesView(it, i, k, last) +
     '<div class="sug"><span>' + esc(sug.text) + '</span>' + useBtn + '</div>' +
     '<div class="sets' + (showW ? '' : ' nw') + (isTime ? ' tm' : '') + '"><div class="shead" aria-hidden="true"><span>Serie</span><span>Anterior</span>' + (showW ? '<span>Kg</span>' : '') + '<span>' + (isTime ? 'Seg' : 'Reps') + '</span>' + (isTime ? '<span></span>' : '') + '<span>✓</span></div>' + rows + '</div>' +
     '<div class="ex-actions"><button class="btn-soft" data-act="set-add" data-i="' + i + '">+ Añadir serie</button>' + (canDel ? '<button class="btn-text muted" data-act="set-del" data-i="' + i + '">Quitar la última</button>' : '') + '</div>' +
@@ -1411,6 +1468,40 @@ function viewTrain(){
     (items || emptyTxt) + addBox + finish;
 }
 
+/* Calendario del mes: cada día con sesión lleva su letra; al tocarlo baja a esa sesión */
+const MONTHS_LONG = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+function viewCalendar(){
+  const t = todayISO(), ym = S.calM || t.slice(0, 7), y = Number(ym.slice(0, 4)), m = Number(ym.slice(5, 7));
+  const first = ym + '-01', days = new Date(y, m, 0).getDate(), lead = (parseISO(first).getDay() + 6) % 7;
+  const byDay = {};
+  for (const s of S.sessions) if (s.date.slice(0, 7) === ym) (byDay[s.date] = byDay[s.date] || []).push(s.session);
+  const n = Object.values(byDay).reduce((a, l) => a + l.length, 0);
+  let cells = '';
+  for (let i = 0; i < lead; i++) cells += '<span class="cal-d empty"></span>';
+  for (let d = 1; d <= days; d++) {
+    const iso = ym + '-' + pad(d), l = byDay[iso];
+    const cls = 'cal-d' + (l ? ' on' : '') + (iso === t ? ' today' : '');
+    cells += l ? '<button class="' + cls + '" data-act="cal-day" data-v="' + iso + '" aria-label="' + esc(fmtLong(iso)) + ': sesión ' + esc(l.join(' y ')) + '"><span>' + d + '</span><b>' + esc(l.join('')) + '</b></button>'
+      : '<span class="' + cls + '"><span>' + d + '</span></span>';
+  }
+  const canNext = ym < t.slice(0, 7);
+  return '<section class="card cal"><div class="row between"><button class="pill sm" data-act="cal-m" data-v="-1" aria-label="Mes anterior">‹</button>' +
+    '<b class="cal-t">' + MONTHS_LONG[m - 1] + ' ' + y + '</b>' +
+    '<button class="pill sm" data-act="cal-m" data-v="1" aria-label="Mes siguiente"' + (canNext ? '' : ' disabled') + '>›</button></div>' +
+    '<div class="cal-g" aria-hidden="true">' + ['L','M','X','J','V','S','D'].map(x => '<span class="cal-h">' + x + '</span>').join('') + '</div>' +
+    '<div class="cal-g">' + cells + '</div>' +
+    '<p class="small muted">' + (n ? n + ' ' + (n === 1 ? 'sesión' : 'sesiones') + ' este mes.' : 'Ninguna sesión este mes.') + '</p></section>';
+}
+function calMove(delta){
+  const ym = S.calM || todayISO().slice(0, 7), d = new Date(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)) - 1 + delta, 1);
+  const next = isoOf(d).slice(0, 7);
+  if (next <= todayISO().slice(0, 7)) S.calM = next;
+  render();
+}
+function calDay(iso){
+  const s = sortedDesc().find(x => x.date === iso), el = s && document.getElementById('h-' + s.id);
+  if (el) el.scrollIntoView({ behavior:'smooth', block:'start' });
+}
 function viewHistory(){
   if (!ready()) return header('Historial') + '<p class="empty">Cargando…</p>';
   const n = S.sessions.length;
@@ -1424,11 +1515,11 @@ function viewHistory(){
       ? '<button class="btn-text danger" data-act="del" data-v="' + esc(s.id) + '">Pulsa otra vez para borrar</button>'
       : '<button class="btn-text muted" data-act="del" data-v="' + esc(s.id) + '">Borrar</button>';
     const ne = (s.items || []).length;
-    return '<article class="card"><div class="hist-top"><span class="badge-k">' + esc(s.session) + '</span><div><h3>' + esc(fmtLong(s.date)) + '</h3><p class="small muted">' + ne + ' ' + (ne === 1 ? 'ejercicio' : 'ejercicios') + (dur ? ' · ' + dur + ' min' : '') + '</p></div></div>' +
+    return '<article class="card" id="h-' + esc(s.id) + '"><div class="hist-top"><span class="badge-k">' + esc(s.session) + '</span><div><h3>' + esc(fmtLong(s.date)) + '</h3><p class="small muted">' + ne + ' ' + (ne === 1 ? 'ejercicio' : 'ejercicios') + (dur ? ' · ' + dur + ' min' : '') + '</p></div></div>' +
       '<ul class="hist-list">' + lines + '</ul>' + (s.note ? '<p class="small muted">' + esc(s.note) + '</p>' : '') + '<div>' + del + '</div></article>';
   }).join('');
   const exp = '<div class="row"><span class="lab">Exportar</span><button class="pill" data-act="export-xlsx"' + (S.exporting ? ' disabled' : '') + '>' + (S.exporting ? 'Preparando…' : 'Excel') + '</button><button class="pill" data-act="export">CSV</button></div>';
-  return header('Historial', n + ' ' + (n === 1 ? 'sesión guardada' : 'sesiones guardadas') + '.') + exp + list;
+  return header('Historial', n + ' ' + (n === 1 ? 'sesión guardada' : 'sesiones guardadas') + '.') + viewCalendar() + exp + list;
 }
 
 function exerciseOptions(){
@@ -1636,7 +1727,48 @@ async function saveRmAction(id){
 function normFicha(f){
   f = f && typeof f === 'object' ? f : {};
   const med = Array.isArray(f.medidas) ? f.medidas.filter(m => m && m.date) : [];
-  return { photo: typeof f.photo === 'string' && f.photo.startsWith('data:image/') ? f.photo : null, medidas: med.sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0) };
+  const out = { photo: typeof f.photo === 'string' && f.photo.startsWith('data:image/') ? f.photo : null, medidas: med.sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0) };
+  if (typeof f.nac === 'string' && /^\d{4}-\d{2}$/.test(f.nac)) out.nac = f.nac;
+  return out;
+}
+/* Años cumplidos con el mes de nacimiento (se cuenta cumplido desde el día 1 de ese mes) */
+const ageOf = (nac, iso) => { const y = Number(iso.slice(0, 4)) - Number(nac.slice(0, 4)); return Number(iso.slice(5, 7)) < Number(nac.slice(5, 7)) ? y - 1 : y; };
+/* Ritmo de crecimiento: de la última altura a la apuntada más cerca de un año antes (al menos 4 meses antes) */
+function growthRate(med){
+  const hs = med.filter(x => x.h != null); if (hs.length < 2) return null;
+  const last = hs[hs.length - 1], target = parseISO(addDays(last.date, -365)).getTime();
+  const cands = hs.filter(x => x.date <= addDays(last.date, -120)); if (!cands.length) return null;
+  const dist = x => Math.abs(parseISO(x.date).getTime() - target);
+  const ref = cands.reduce((b, x) => dist(x) < dist(b) ? x : b);
+  const yrs = (parseISO(last.date) - parseISO(ref.date)) / (365.25 * 864e5);
+  return { cm: (last.h - ref.h) / yrs, from: ref.date };
+}
+/* Avisos generales según la edad y el ritmo de crecimiento; solo para menores de 18 */
+const GROWTH_FAST = 7; // cm al año
+function fichaAvisos(f){
+  if (!f.nac) return '';
+  const age = ageOf(f.nac, todayISO()); if (age < 5 || age >= 18) return '';
+  const gr = growthRate(f.medidas), cm = gr ? Math.round(gr.cm * 10) / 10 : null, fast = cm != null && cm >= GROWTH_FAST && age >= 9;
+  const out = [];
+  if (fast) {
+    out.push('Desde el ' + fmtDate(gr.from) + ' ' + gr.from.slice(0, 4) + ' crece a unos ' + fmtNum(cm) + ' cm al año: parece el estirón.');
+    out.push('Es normal que pierda algo de coordinación y flexibilidad durante unos meses. Mejor afianzar la técnica que subir peso deprisa.');
+    out.push('Si le duelen las rodillas, los talones o la espalda al entrenar, ese ejercicio se para y se consulta con el pediatra.');
+  } else {
+    if (age <= 12) out.push('Antes del estirón: técnica, coordinación y fuerza con poco peso, de 8 a 15 repeticiones, sin máximos ni series al fallo.');
+    else if (age <= 15) { out.push('Es la edad habitual del estirón.'); out.push('Con la pubertad gana músculo con más facilidad: puede tocar algo más de carga o un tercer día, siempre con técnica limpia.'); }
+    else out.push('Puede ir sumando volumen y ejercicios con barra, con buena técnica y alguien que le corrija.');
+    if (cm != null) out.push('Ahora crece a unos ' + fmtNum(Math.max(0, cm)) + ' cm al año.');
+    else if (age <= 16) out.push('Apuntar la altura cada 2 o 3 meses ayuda a ver cuándo llega el estirón.');
+  }
+  return '<div class="notice' + (fast ? ' warn' : '') + '" style="flex-direction:column;align-items:stretch"><p><strong>' + age + ' años.</strong></p><ul class="guide">' + out.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>' +
+    '<p class="small muted">Son orientaciones generales. Para valorar el crecimiento o cualquier molestia, el pediatra.</p></div>';
+}
+async function saveNacAction(v){
+  if (v && !/^\d{4}-\d{2}$/.test(v)) return;
+  const next = Object.assign({}, S.ficha); if (v) next.nac = v; else delete next.nac;
+  try { await store.saveFicha(next); } catch (e) { toast('No se ha guardado: ' + ((e && e.message) || 'inténtalo de nuevo')); }
+  render();
 }
 /* Foto de otro perfil (para la pantalla de elegir): se lee directamente del navegador */
 function photoOf(id){
@@ -1690,6 +1822,8 @@ function viewPerfil(){
       '<span class="small muted">' + esc([lh ? fmtNum(lh.h) + ' cm' : '', lw ? fmtNum(lw.w) + ' kg' : ''].filter(Boolean).join(' · ') || 'Sin medidas todavía') + '</span>' +
       '<div class="row"><button class="btn-text" data-act="fi-photo">' + (f.photo ? 'Cambiar foto' : 'Poner foto') + '</button>' + (f.photo ? '<button class="btn-text muted" data-act="fi-photo-del">Quitar</button>' : '') + '</div></div></div>' +
     '<input type="file" id="fi-file" accept="image/*" data-act="fi-file" hidden>' +
+    '<label>Mes de nacimiento <span class="muted">(para los avisos según la edad)</span><input type="month" data-key="fi-nac" data-act="fi-nac" max="' + todayISO().slice(0, 7) + '" value="' + esc(f.nac || '') + '" style="display:block;width:100%;margin-top:4px"></label>' +
+    fichaAvisos(f) +
     '<div class="egrid"><label>Fecha<input type="date" id="fi-date" data-key="fi-date" value="' + todayISO() + '"></label>' +
       '<label>Altura (cm)<input type="text" inputmode="decimal" id="fi-h" data-key="fi-h" placeholder="' + (lh ? fmtNum(lh.h) : '') + '"></label>' +
       '<label>Peso (kg)<input type="text" inputmode="decimal" id="fi-w" data-key="fi-w" placeholder="' + (lw ? fmtNum(lw.w) : '') + '"></label></div>' +
@@ -1727,30 +1861,28 @@ function viewPlan(){
         '<label>Máximo<input type="text" inputmode="numeric" data-key="ema-' + kp + '" data-act="e-max" data-i="' + i + '" value="' + esc(e.max) + '"></label>' +
         ownFields +
         '<label>Descanso<select data-act="e-rest" data-i="' + i + '"><option value="">El general</option>' + RESTS.map(r => '<option value="' + r + '"' + (Number(e.rest) === r ? ' selected' : '') + '>' + restLabel(r) + '</option>').join('') + '</select></label>' +
+        (i < list.length - 1 ? '<label>Superserie<select data-act="e-ss" data-i="' + i + '"><option value="">No</option><option value="1"' + (e.ss ? ' selected' : '') + '>Con el siguiente</option></select></label>' : '') +
         '<label>Salto de peso (kg)<input type="text" inputmode="decimal" data-key="est-' + kp + '" data-act="e-step" data-i="' + i + '" value="' + esc(e.step == null ? '' : fmtNum(e.step)) + '"></label>' +
       '</div>' +
       '<input type="text" data-key="eno-' + kp + '" data-act="e-note" data-i="' + i + '" value="' + esc(e.note || '') + '" placeholder="Nota (opcional)" aria-label="Nota">' +
       '<div class="row">' + (i > 0 ? '<button class="btn-text" data-act="e-up" data-i="' + i + '">Subir</button>' : '') + (i < list.length - 1 ? '<button class="btn-text" data-act="e-down" data-i="' + i + '">Bajar</button>' : '') + '<button class="btn-text" data-act="fx-open" data-v="' + esc(e.id) + '">Ficha</button><button class="btn-text muted" data-act="e-del" data-i="' + i + '">Quitar</button></div>' +
     '</div>';
   }).join('');
-  const np = season === SEASON0 ? nextPhaseToApply() : null;
+  const np = nextPhaseToApply(season);
+  const undo = S.prevCfg && S.prevCfg.phase ? '<button class="btn-text muted" data-act="phase-undo">Deshacer el paso a la fase ' + S.prevCfg.phase + '</button>' : '';
+  const review = season > SEASON0 ? '<p class="small"><strong>Temporada ' + seasonName(season) + '.</strong> Al empezar cada temporada, revisad el plan: con el estirón puede tocar más carga, otro ejercicio o un tercer día.</p>' : '';
   let phaseBox;
-  if (season > SEASON0) {
-    phaseBox = '<section class="card"><p><strong>Temporada ' + seasonName(season) + '.</strong> Las fases ya no cambian ejercicios solas: marcan el rango de repeticiones de cada momento.</p>' +
-      '<ul class="guide"><li>Al empezar la temporada, revisad el plan: con el estirón puede tocar más carga, otro ejercicio o un tercer día.</li>' +
-      '<li>En cada fase, ajusta las series y repeticiones de los básicos a lo que dice la lista de abajo.</li></ul></section>';
-  } else if (np) {
-    const early = t < np.start;
-    phaseBox = '<section class="card"><p><strong>Fase ' + np.n + ': ' + esc(np.name) + '</strong>, desde el ' + fmtDate(np.start) + '.</p>' +
-      '<ul class="guide">' + PHASE_CHANGES[np.n].summary.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>' +
+  if (np) {
+    const early = t < np.start, key = season + ':' + np.n;
+    phaseBox = '<section class="card">' + review + '<p><strong>Fase ' + np.n + ': ' + esc(np.name) + '</strong>, desde el ' + fmtDate(np.start) + '.</p>' +
+      '<ul class="guide">' + changesFor(season, np.n).summary.map(x => '<li>' + esc(x) + '</li>').join('') + '</ul>' +
       '<p class="small muted">' + (early ? 'Aún no toca. Puedes adelantarlo si la técnica ya está limpia.' : 'Ya toca. Los ejercicios y el historial que no cambian se quedan igual.') + '</p>' +
-      '<button class="btn-primary" data-act="phase-apply" data-v="' + np.n + '">' + (S.confirmPhase === np.n ? 'Pulsa otra vez para pasar a la fase ' + np.n : 'Pasar a la fase ' + np.n) + '</button>' +
-      (S.prevCfg && S.prevCfg.phase ? '<button class="btn-text muted" data-act="phase-undo">Deshacer el paso a la fase ' + S.prevCfg.phase + '</button>' : '') + '</section>';
+      '<button class="btn-primary" data-act="phase-apply" data-v="' + key + '">' + (S.confirmPhase === key ? 'Pulsa otra vez para pasar a la fase ' + np.n : 'Pasar a la fase ' + np.n) + '</button>' + undo + '</section>';
   } else {
-    phaseBox = '<section class="card"><p class="small muted">Todas las fases del plan están aplicadas.</p>' + (S.prevCfg && S.prevCfg.phase ? '<button class="btn-text muted" data-act="phase-undo">Deshacer el paso a la fase ' + S.prevCfg.phase + '</button>' : '') + '</section>';
+    phaseBox = '<section class="card">' + review + '<p class="small muted">Todas las fases de la temporada están aplicadas.</p>' + undo + '</section>';
   }
   return header('Ajustes') + viewPerfil() +
-    (isEric() ? '<h2 class="section-title">' + (season > SEASON0 ? 'Temporada' : 'Cambio de fase') + '</h2>' + phaseBox +
+    (isEric() ? '<h2 class="section-title">Cambio de fase</h2>' + phaseBox +
     '<h2 class="section-title">Fases de la temporada ' + seasonName(season) + '</h2><section class="card"><ul class="phases">' + phases + '</ul></section>' : '') +
     '<h2 class="section-title">Cómo subir peso</h2><section class="card"><ul class="guide">' +
       '<li>Cuando haga todas las series en el máximo del rango y diga <strong>fácil</strong> o <strong>justo</strong>, el diario propone el siguiente peso.</li>' +
@@ -1767,11 +1899,12 @@ function viewPlan(){
 }
 function viewGear(){
   const rows = GEAR.map(g => {
-    const l = gearRaw(g[0]), dr = S.gearDraft[g[0]];
+    const l = Array.isArray(S.gear[g[0]]) ? S.gear[g[0]] : [], dr = S.gearDraft[g[0]];
     const bw = g[0] === 'discos' ? barbellWeights() : [];
     const sums = g[3] && g[0] !== 'discos' && l.length ? gearList(g[0]) : [], low = sums.filter(x => x <= 10);
     return '<label>' + g[1] + ' <span class="muted">(' + g[2] + ')</span><input type="text" inputmode="decimal" placeholder="Ej.: 1 2 3 4 5" style="display:block;width:100%;margin-top:4px" data-key="gear-' + g[0] + '" data-act="gear" data-v="' + g[0] + '" value="' + esc(dr != null ? dr : gearText(l)) + '"></label>' +
       (g[0] === 'discos' ? '<p class="small muted">Si hay dos discos iguales, escríbelo dos veces. En la barra van por parejas, uno a cada lado.' + (bw.length ? ' Con las barras se pueden montar ' + bw.length + ' pesos, de ' + fmtNum(bw[0]) + ' a ' + fmtNum(bw[bw.length - 1]) + ' kg.' : '') + '</p>'
+      : g[0] === 'mancuerna' ? '<p class="small muted">Para goblet, remo a una mano, pullover y parecidos, que se hacen con una sola mancuerna. Vacía: usa la lista de mancuernas.</p>'
       : g[3] ? '<p class="small muted">Si hay dos discos iguales, escríbelo dos veces.' + (sums.length ? ' Se pueden poner ' + sums.length + ' pesos distintos. Hasta 10 kg: ' + esc(low.map(fmtNum).join(', ')) + ' kg.' : '') + '</p>' : '');
   }).join('');
   return '<h2 class="section-title">Material de casa</h2><section class="card">' +
@@ -1907,8 +2040,10 @@ async function saveTemplatesAction(){
       if (RESTS.indexOf(Number(e.rest)) >= 0) out.rest = Number(e.rest);
       if (Array.isArray(e.m) && e.m.length) out.m = e.m.slice();
       if (e.eq) out.eq = e.eq;
+      if (e.ss) out.ss = true;
       return out;
     });
+    if (out[k].length) delete out[k][out[k].length - 1].ss; // el último no tiene con quién
   }
   try {
     await store.saveConfig({ templates: out, phasesApplied: S.edit.resetPhases ? [] : S.phasesApplied, prev: null });
@@ -1921,10 +2056,14 @@ function clearEmptyDrafts(){
   for (const k of KEYS) { const dr = S.drafts[k]; if (dr && !dr.items.some(it => it.reps.some(v => v !== ''))) delete S.drafts[k]; }
   saveDrafts();
 }
-async function applyPhase(n){
+async function applyPhase(y, n){
+  const ch = changesFor(y, n); if (!ch) return;
   if (S.edit && S.edit.dirty) { toast('Primero guarda los cambios a mano que tienes a medias'); return; }
-  const t = clone(S.templates); PHASE_CHANGES[n].apply(t);
-  const applied = Array.from(new Set(S.phasesApplied.concat([n]))).sort((a, b) => a - b);
+  const t = clone(S.templates); ch.apply(t);
+  const nums = S.phasesApplied.filter(x => typeof x === 'number'), keys = S.phasesApplied.filter(x => typeof x !== 'number');
+  const k = phaseKey(y, n), applied = typeof k === 'number'
+    ? Array.from(new Set(nums.concat([k]))).sort((a, b) => a - b).concat(keys)
+    : nums.concat(Array.from(new Set(keys.concat([k]))));
   try {
     await store.saveConfig({ templates: t, phasesApplied: applied, prev: { templates: clone(S.templates), phasesApplied: S.phasesApplied.slice(), phase: n } });
     S.edit = null; clearEmptyDrafts();
@@ -2088,7 +2227,9 @@ function markDone(i, s){
   if (!d.startedAt) d.startedAt = Date.now();
   saveDrafts();
   const pr = draftProgress(d);
-  if (pr.done < pr.total) startRest(it.rest || S.restSec); else stopRest();
+  const nx = d.items[Number(i) + 1];
+  if (it.ss && nx && !nx.skip && s < nx.reps.length && !nx.done[s]) { stopRest(); toast('Superserie: ahora ' + nx.name + ', serie ' + (s + 1)); }
+  else if (pr.done < pr.total) startRest(it.rest || S.restSec); else stopRest();
   render();
 }
 
@@ -2166,6 +2307,8 @@ function onClick(act, ds){
       else S.confirmDiscard = true;
       render(); break;
     case 'del': if (S.confirmDel === ds.v) { S.confirmDel = null; deleteSession(ds.v); } else { S.confirmDel = ds.v; render(); } break;
+    case 'cal-m': calMove(Number(ds.v)); break;
+    case 'cal-day': calDay(ds.v); break;
     case 'export': exportCsv(); break;
     case 'export-xlsx': exportXlsx(); break;
     case 'cp': S.cp = ds.v; render(); break;
@@ -2184,7 +2327,7 @@ function onClick(act, ds){
       ed.dirty = true; S.focusKey = 'en-' + ed.key + '-' + (l.length - 1); render(); break;
     }
     case 'e-save': if (S.edit && S.edit.dirty) saveTemplatesAction(); break;
-    case 'phase-apply': { const n = Number(ds.v); if (S.confirmPhase === n) { S.confirmPhase = null; applyPhase(n); } else { S.confirmPhase = n; render(); } break; }
+    case 'phase-apply': { if (S.confirmPhase === ds.v) { S.confirmPhase = null; const p = ds.v.split(':').map(Number); applyPhase(p[0], p[1]); } else { S.confirmPhase = ds.v; render(); } break; }
     case 'phase-undo': undoPhase(); break;
     case 'e-reset':
       if (S.confirmReset) { S.confirmReset = false; const ed = ensureEdit(); ed.tpl = clone(DEFAULT_TEMPLATES); ed.dirty = true; ed.resetPhases = true; toast('Plan inicial cargado. Pulsa Guardar cambios para aplicarlo'); }
@@ -2223,6 +2366,7 @@ function onField(act, ds, val){
       if (e) { e[field] = val; markEditDirty(ed); }
       break;
     }
+    case 'e-ss': { const ed = ensureEdit(), e = ed.tpl[ed.key][Number(ds.i)]; if (e) { if (val) e.ss = true; else delete e.ss; markEditDirty(ed); } break; }
     case 'e-m': case 'e-eq': {
       const ed = ensureEdit(), e = ed.tpl[ed.key][Number(ds.i)];
       if (e) { if (act === 'e-m') e.m = val ? [val] : []; else e.eq = val; markEditDirty(ed); }
@@ -2250,6 +2394,7 @@ root.addEventListener('change', e => {
   // Peso cambiado a mano: se copia a las series siguientes sin hacer
   if (el.dataset.act === 'it-fixnote') { const it = curItem(el.dataset.i); delete it.fixDraft; saveExNote(it.id, el.value); return; }
   if (el.dataset.act === 'fx-fixnote') { if (S.fx) { delete S.fx.noteDraft; saveExNote(S.fx.id, el.value); } return; }
+  if (el.dataset.act === 'fi-nac') { saveNacAction(el.value); return; }
   if (el.dataset.act === 'gear') { saveGearAction(el.dataset.v, el.value); return; }
   if (el.dataset.act === 'setw') { setSetW(curItem(el.dataset.i), Number(el.dataset.s), el.value); saveDrafts(); render(); return; }
   if (el.tagName === 'SELECT' && el.dataset.act) onField(el.dataset.act, el.dataset, el.value);
