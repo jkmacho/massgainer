@@ -1,6 +1,6 @@
 // Service worker del diario: funciona sin conexión.
 // Al publicar una versión nueva, subir VERSION para que el móvil la recoja.
-const VERSION = 'v11';
+const VERSION = 'v12';
 const CACHE = 'diario-eric-' + VERSION;
 const SHELL = ['./', 'index.html', 'ejercicios.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png'];
 
@@ -35,6 +35,8 @@ self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
+  // sw.js siempre de la red: la página lo lee para saber si hay versión nueva
+  if (url.pathname.endsWith('/sw.js')) return;
 
   // La página: primero la red (así llegan las versiones nuevas), sin conexión la guardada
   if (req.mode === 'navigate') {

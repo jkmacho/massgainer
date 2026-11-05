@@ -382,6 +382,8 @@ label.sub{ font-weight:700; }
 /* Temporadas: cada una va de octubre a junio (como el curso) y le sigue un verano (julio a septiembre).
    Las 4 fases y las 5 semanas de pruebas se repiten cada temporada con las mismas fechas.
    La primera es la 2026-27; sus pruebas conservan los id de siempre (oct, nov…) */
+/* Versión de la app: tiene que ser igual que VERSION en sw.js */
+const APP_VERSION = 'v12';
 const SEASON0 = 2026;
 const PHASE_TPL = [
   { n:1, name:'Técnica y base',   start:'10-01', end:'11-22', reps:'2-3 × 10-15 reps' },
@@ -1895,7 +1897,7 @@ function viewPlan(){
     '<div class="sessions three" role="group" aria-label="Sesión a editar">' + seg + '</div>' +
     '<section class="card">' + (rows || '<p class="small muted">Sin ejercicios.</p>') + '<button class="btn-soft" data-act="pk-open" data-v="plan">+ Añadir ejercicio</button></section>' +
     '<button class="btn-primary" data-act="e-save"' + (ed.dirty ? '' : ' disabled') + '>' + (ed.dirty ? 'Guardar cambios' : 'Sin cambios') + '</button>' +
-    '<button class="btn-text ' + (S.confirmReset ? 'danger' : 'muted') + '" data-act="e-reset">' + (S.confirmReset ? 'Pulsa otra vez para volver al plan inicial' : 'Volver al plan inicial') + '</button>';
+    '<button class="btn-text ' + (S.confirmReset ? 'danger' : 'muted') + '" data-act="e-reset">' + (S.confirmReset ? 'Pulsa otra vez para volver al plan inicial' : 'Volver al plan inicial') + '</button>' + viewVersion();
 }
 function viewGear(){
   const rows = GEAR.map(g => {
@@ -1917,6 +1919,20 @@ async function saveGearAction(eq, txt){
   try { await store.saveGear(next); delete S.gearDraft[eq]; toast(l.length ? 'Material guardado' : 'Lista vacía: se usa el salto de peso'); }
   catch (e) { toast('No se ha guardado: ' + ((e && e.message) || 'inténtalo de nuevo')); }
   render();
+}
+/* Versión: la de esta página y, si en la web hay otra, aviso para cerrar y abrir la app */
+let latestVersion = null;
+function checkVersion(){
+  if (!/^https?:$/.test(location.protocol)) return;
+  fetch('sw.js', { cache:'no-store' }).then(r => r.ok ? r.text() : '').then(t => {
+    const m = /VERSION = '([^']+)'/.exec(t);
+    if (m && m[1] !== latestVersion) { latestVersion = m[1]; if (S.tab === 'plan' && !(S.edit && S.edit.dirty)) render(); }
+  }).catch(() => {});
+}
+function viewVersion(){
+  const newer = latestVersion && latestVersion !== APP_VERSION;
+  return (newer ? '<p class="notice warn">Hay una versión nueva (' + esc(latestVersion) + '). Cierra la app del todo y vuelve a abrirla.</p>' : '') +
+    '<p class="small muted" style="text-align:center;margin:18px 0 4px">Diario de fuerza · versión ' + APP_VERSION + (latestVersion && !newer ? ' (la última)' : '') + '</p>';
 }
 function viewBackup(){
   const lb = LS.get('lastBackup', null), pi = S.pendingImport;
@@ -2242,7 +2258,7 @@ function onClick(act, ds){
     case 'fi-add': addMedidaAction(); break;
     case 'fi-del': delMedidaAction(ds.v); break;
     case 'profile-change': if (timerId || work) { toast('Termina o salta el descanso antes de cambiar de perfil'); break; } forgetProfile(); PROFILE = null; location.reload(); break;
-    case 'tab': S.tab = ds.v; S.confirmDel = null; S.confirmReset = false; S.confirmPhase = null; S.confirmDiscard = false; render(); window.scrollTo(0, 0); break;
+    case 'tab': if (ds.v === 'plan') checkVersion(); S.tab = ds.v; S.confirmDel = null; S.confirmReset = false; S.confirmPhase = null; S.confirmDiscard = false; render(); window.scrollTo(0, 0); break;
     case 'session': S.active = ds.v; S.confirmDiscard = false; render(); break;
     case 'pk-open': {
       const last = LS.get('pickFilter', {}) || {};
