@@ -389,7 +389,7 @@ label.sub{ font-weight:700; }
    Las 4 fases y las 5 semanas de pruebas se repiten cada temporada con las mismas fechas.
    La primera es la 2026-27; sus pruebas conservan los id de siempre (oct, nov…) */
 /* Versión de la app: tiene que ser igual que VERSION en sw.js */
-const APP_VERSION = 'v13';
+const APP_VERSION = 'v14';
 const SEASON0 = 2026;
 const PHASE_TPL = [
   { n:1, name:'Técnica y base',   start:'10-01', end:'11-22', reps:'2-3 × 10-15 reps' },
@@ -441,7 +441,7 @@ const DEFAULT_TEMPLATES = {
     { id:'plancha', name:'Plancha', kind:'time', sets:3, min:30, max:45, weight:0, step:0, note:'Parar si cae la cadera' }
   ],
   B: [
-    { id:'rdl', name:'Peso muerto rumano con mancuernas', kind:'reps', sets:3, min:10, max:12, weight:4, step:1, note:'Kg por mancuerna, espalda recta' },
+    { id:'j_peso_muerto', name:'Peso muerto con barra', kind:'reps', sets:3, min:10, max:12, weight:13, step:1, note:'Barra olímpica sobre los soportes; kg totales con la barra; espalda recta y barra pegada a las piernas' },
     { id:'jalon', name:'Jalón al pecho', kind:'reps', sets:3, min:10, max:12, weight:null, step:1, note:'Sin balancearse' },
     { id:'flex_barra', name:'Flexiones inclinadas en la barra', kind:'reps', sets:3, min:8, max:12, weight:0, step:0, note:'Con 3 × 12, bajar la barra un agujero' },
     { id:'remo_polea', name:'Remo sentado en polea baja', kind:'reps', sets:3, min:10, max:12, weight:null, step:1, note:'Hombros atrás al final' },
@@ -530,7 +530,7 @@ const PHASE_CHANGES = {
       setRange(t.A, ['goblet', 'press_incl', 'remo_banco'], 3, 8, 12);
       swapEx(t.B, 'remo_polea', { id:'remo_inv', name:'Remo invertido en la barra', kind:'reps', sets:3, min:8, max:12, weight:0, step:0, note:'Cuerpo recto; con 3 × 12, bajar la barra un agujero' });
       addAfter(t.B, { id:'bajadas', name:'Bajadas lentas de dominada', kind:'reps', sets:3, min:3, max:5, weight:0, step:0, note:'Subir con un salto o desde un banco y bajar en 3-5 s' }, 'jalon');
-      setRange(t.B, ['rdl', 'jalon'], 3, 8, 12);
+      setRange(t.B, ['rdl', 'j_peso_muerto', 'jalon'], 3, 8, 12);
     }
   },
   3: {
@@ -540,7 +540,7 @@ const PHASE_CHANGES = {
     ],
     apply(t){
       setRange(t.A, ['goblet', 'press_incl'], 3, 6, 10);
-      setRange(t.B, ['rdl', 'jalon'], 3, 6, 10);
+      setRange(t.B, ['rdl', 'j_peso_muerto', 'jalon'], 3, 6, 10);
     }
   },
   4: {
@@ -551,7 +551,7 @@ const PHASE_CHANGES = {
     apply(t){
       addTop(t.A, jumpEx()); addTop(t.B, jumpEx());
       setRange(t.A, ['goblet', 'press_incl'], 3, 6, 10);
-      setRange(t.B, ['rdl', 'jalon'], 3, 6, 10);
+      setRange(t.B, ['rdl', 'j_peso_muerto', 'jalon'], 3, 6, 10);
     }
   }
 };
@@ -678,7 +678,7 @@ const store = {
         if (d && d.templates && d.templates.A && d.templates.B) S.templates = clone(d.templates);
         S.phasesApplied = d && Array.isArray(d.phasesApplied) ? d.phasesApplied.slice() : [];
         S.prevCfg = d && d.prev && d.prev.templates ? clone(d.prev) : null;
-        S.loaded.cfg = true; render();
+        S.loaded.cfg = true; render(); migrateDeadlift();
       }, err => dbFail(err));
       this.refs.notes.onSnapshot(snap => {
         const d = snap.exists ? snap.data() : null;
@@ -710,7 +710,7 @@ const store = {
       S.gear = LS.get('gear', null) || clone(DEFAULT_GEAR);
       S.ficha = normFicha(LS.get('ficha', null));
       S.loaded.sessions = S.loaded.cfg = true;
-      render();
+      render(); migrateDeadlift();
     }
   },
   async retry(fn){
@@ -946,6 +946,29 @@ function draftItem(t){
 }
 function buildDraft(k){
   return { session:k, date: todayISO(), created: todayISO(), note:'', startedAt:null, items: (S.templates[k] || []).map(draftItem) };
+}
+/* v14: en el plan de Eric, el peso muerto con barra sustituye al rumano con mancuernas (una sola vez, conservando series, rango, descanso y superserie) */
+function migrateDeadlift(){
+  if (!isEric() || LS.get('migPesoMuerto', false) || !S.loaded.cfg || store.mode === 'db' && S.dbError) return;
+  const has = t => !!t && KEYS.some(k => (t[k] || []).some(x => x.id === 'rdl'));
+  const fix = t => {
+    const out = clone(t);
+    for (const k of KEYS) {
+      const l = out[k] || [], j = l.findIndex(x => x.id === 'rdl');
+      if (j < 0) continue;
+      if (l.some(x => x.id === 'j_peso_muerto')) { l.splice(j, 1); continue; }
+      const old = l[j], nu = clone(catalogItem('j_peso_muerto'));
+      for (const f of ['sets', 'min', 'max', 'rest', 'ss']) if (old[f] !== undefined) nu[f] = old[f];
+      l[j] = nu;
+    }
+    return out;
+  };
+  LS.set('migPesoMuerto', true);
+  if (!has(S.templates) && !(S.prevCfg && has(S.prevCfg.templates))) return;
+  const prev = S.prevCfg ? Object.assign(clone(S.prevCfg), { templates: fix(S.prevCfg.templates) }) : null;
+  store.saveConfig({ templates: fix(S.templates), phasesApplied: S.phasesApplied, prev })
+    .then(() => { toast('Plan: el peso muerto con barra sustituye al rumano'); render(); })
+    .catch(() => LS.set('migPesoMuerto', false));
 }
 const catalogItem = id => { for (const g of CATALOG) { const e = g.items.find(x => x.id === id); if (e) return e; } return null; };
 
