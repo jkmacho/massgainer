@@ -138,6 +138,8 @@ h1{ font-family:var(--display); font-weight:700; font-size:38px; line-height:1; 
 .tag{ flex-shrink:0; font-family:var(--display); font-weight:700; font-size:18px; line-height:1; padding:6px 9px; border-radius:8px; background:var(--surface-2); border:1px solid var(--line); font-variant-numeric:tabular-nums; }
 .ex.is-done .tag{ background:var(--done-soft); border-color:var(--done); color:var(--done); }
 .ex-note{ color:var(--muted); font-size:14px; margin-top:-4px; }
+.hole{ display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:15px; font-weight:700; }
+.hole .cell{ width:64px; }
 .sug{ display:flex; flex-wrap:wrap; align-items:center; gap:6px 10px; padding:8px 10px; border-radius:10px; background:var(--gold-soft); font-size:15px; }
 .sug span{ flex:1 1 180px; }
 .ex.is-skipped h3{ color:var(--muted); text-decoration:line-through; }
@@ -426,7 +428,7 @@ const TESTS = [
 ];
 const WORKING = [
   { id:'press_incl', name:'Press inclinado' },
-  { id:'rdl', name:'Peso muerto rumano' },
+  { id:'rdl', alt:['j_peso_muerto'], name:'Peso muerto' },
   { id:'jalon', name:'Jalón al pecho' }
 ];
 const DEFAULT_TEMPLATES = {
@@ -471,6 +473,7 @@ const CATALOG = [
     { id:'bulgara', name:'Sentadilla búlgara', kind:'reps', sets:2, min:8, max:10, weight:0, step:1, note:'Pie de atrás en el banco, reps por pierna' },
     { id:'step_up', name:'Subida al banco con mancuernas', kind:'reps', sets:2, min:8, max:10, weight:2, step:1, note:'Kg por mancuerna, reps por pierna' },
     { id:'rdl', name:'Peso muerto rumano con mancuernas', kind:'reps', sets:3, min:10, max:12, weight:4, step:1, note:'Kg por mancuerna, espalda recta' },
+    { id:'j_peso_muerto', name:'Peso muerto con barra', kind:'reps', sets:3, min:6, max:10, weight:13, step:1, note:'Barra olímpica sobre los soportes; kg totales con la barra; espalda recta y barra pegada a las piernas' },
     { id:'kb_peso_muerto', name:'Peso muerto con kettlebell', kind:'reps', sets:3, min:8, max:10, weight:null, step:0, note:'Desde el suelo entre los pies, espalda recta; solo con técnica limpia' },
     { id:'hip_thrust', name:'Hip thrust con la espalda en el banco', kind:'reps', sets:3, min:10, max:12, weight:0, step:1, note:'Kettlebell sobre la cadera cuando se quede corto' },
     { id:'puente', name:'Puente de glúteo', kind:'reps', sets:2, min:12, max:15, weight:0, step:1, note:'' }
@@ -553,7 +556,7 @@ const PHASE_CHANGES = {
   }
 };
 /* Temporadas siguientes: cada fase pone los básicos en su rango; los saltos entran en primavera y salen en otoño */
-const MAIN_IDS = { A:['goblet', 'press_incl'], B:['rdl', 'jalon'] };
+const MAIN_IDS = { A:['goblet', 'press_incl'], B:['rdl', 'j_peso_muerto', 'jalon'] };
 const jumpEx = () => ({ id:'saltos_cajon', name:'Saltos al cajón', kind:'reps', sets:3, min:5, max:5, weight:0, step:0, note:'Cajón bajo, caer suave; justo después del calentamiento' });
 function delEx(list, id){ const i = idxOf(list, id); if (i >= 0) list.splice(i, 1); }
 const NEXT_CHANGES = {
@@ -816,8 +819,8 @@ function entryText(it){
     return groups.map(g => fmtW(g.w) + ': ' + g.r.map(fmtNum).join(', ')).join(' · ') + u + e2;
   }
   const w = it.weight == null ? '' : (it.weight === 0 ? 'peso corporal: ' : fmtNum(it.weight) + ' kg: ');
-  const e = it.effort ? ' (' + EFF[it.effort] + ')' : '';
-  return w + (it.sets || []).map(fmtNum).join(', ') + u + e;
+  const e = it.effort ? ' (' + EFF[it.effort] + ')' : '', h = it.hole != null ? 'agujero ' + fmtNum(it.hole) + ' · ' : '';
+  return h + w + (it.sets || []).map(fmtNum).join(', ') + u + e;
 }
 /* ---------- Material de casa: pesos que existen de verdad ---------- */
 /* Material de casa. Mancuernas: barra de 2 kg + discos de 1 y 2 kg (de 2 a 8 kg cada una).
@@ -881,6 +884,8 @@ function suggest(it, last){
     if (w === 0) return { text:'Primer día: técnica limpia y sin prisa', weight:null };
     return { text:'Empieza con ' + fmtW(w) + ' y técnica limpia', weight:null };
   }
+  if (HOLE_IDS.has(it.id) && last.item.hole != null && num(it.hole) != null && num(it.hole) !== last.item.hole)
+    return { text:'Cambió del agujero ' + fmtNum(last.item.hole) + ' al ' + fmtNum(num(it.hole)) + ': es normal hacer menos reps. Desde aquí, vuelve a subir hasta ' + it.n + ' × ' + it.max, weight:null };
   if (it.id === 'saltos_cajon') return { text:'Calidad antes que cantidad: saltos limpios y caída suave', weight:null };
   const L = last.item, w = L.weight, sets = L.sets || [];
   if (mixedW(L)) {
@@ -897,7 +902,7 @@ function suggest(it, last){
       const nw = g !== undefined ? g : Math.round((w + step) * 10) / 10;
       return { text:'Sube a ' + fmtW(nw), weight:nw };
     }
-    if (it.id === 'flex_barra' || it.id === 'remo_inv') return { text:'Baja la barra un agujero', weight:null };
+    if (HOLE_IDS.has(it.id)) return { text:'Baja la barra un agujero' + (last.item.hole != null ? ' (estaba en el ' + fmtNum(last.item.hole) + ') y apunta el nuevo' : ' y apunta en cuál está'), weight:null };
     if (it.id === 'bajadas') return { text:'Prueba su primera dominada', weight:null };
     if (it.kind === 'time') return { text:'Intenta ' + (it.max + 5) + ' s o más', weight:null };
     return { text: step > 0 ? 'Prueba a añadir algo de peso' : 'Suma repeticiones o pasa a una versión más difícil', weight:null };
@@ -925,12 +930,15 @@ const ICON = {
 };
 
 /* ---------- Borradores de sesión ---------- */
+/* Ejercicios en la barra de la jaula: se apunta el agujero, porque bajarla hace el ejercicio más difícil */
+const HOLE_IDS = new Set(['flex_barra', 'remo_inv']);
 function draftItem(t){
   const last = lastEntry(t.id);
   const w = last && last.item.weight != null ? last.item.weight : t.weight;
   const n = Number(t.sets) || 3, wTxt = w == null ? '' : fmtNum(w);
   return { id:t.id, name:t.name, kind:t.kind, n, min:Number(t.min), max:Number(t.max), step:Number(t.step) || 0, note:t.note || '', rest:Number(t.rest) || 0, ss: !!t.ss,
-    weight: wTxt, reps: Array.from({ length:n }, () => ''), setW: Array.from({ length:n }, () => wTxt), done: Array.from({ length:n }, () => false), effort:null, skip:false };
+    weight: wTxt, reps: Array.from({ length:n }, () => ''), setW: Array.from({ length:n }, () => wTxt), done: Array.from({ length:n }, () => false), effort:null, skip:false,
+    hole: HOLE_IDS.has(t.id) && last && last.item.hole != null ? fmtNum(last.item.hole) : '' };
 }
 function buildDraft(k){
   return { session:k, date: todayISO(), created: todayISO(), note:'', startedAt:null, items: (S.templates[k] || []).map(draftItem) };
@@ -1444,6 +1452,7 @@ function viewEx(it, i, k){
     (it.note ? '<p class="ex-note">' + esc(it.note) + '</p>' : '') +
     ssTxt + (it.rest && it.rest !== S.restSec ? '<p class="ex-rest">' + ICON.clock + 'Descanso ' + restLabel(it.rest) + '</p>' : '') + exNotesView(it, i, k, last) +
     '<div class="sug"><span>' + esc(sug.text) + '</span>' + useBtn + '</div>' +
+    (HOLE_IDS.has(it.id) ? '<label class="hole">Agujero de la barra<input class="cell" type="text" inputmode="numeric" autocomplete="off" id="h-' + k + '-' + i + '" data-key="h-' + k + '-' + i + '" data-act="hole" data-i="' + i + '" value="' + esc(it.hole || '') + '" placeholder="nº" aria-label="Agujero de la barra"></label>' : '') +
     '<div class="sets' + (showW ? '' : ' nw') + (isTime ? ' tm' : '') + '"><div class="shead" aria-hidden="true"><span>Serie</span><span>Anterior</span>' + (showW ? '<span>Kg</span>' : '') + '<span>' + (isTime ? 'Seg' : 'Reps') + '</span>' + (isTime ? '<span></span>' : '') + '<span>✓</span></div>' + rows + '</div>' +
     '<div class="ex-actions"><button class="btn-soft" data-act="set-add" data-i="' + i + '">+ Añadir serie</button>' + (canDel ? '<button class="btn-text muted" data-act="set-del" data-i="' + i + '">Quitar la última</button>' : '') + '</div>' +
     '<div class="ex-foot"><div class="chips" role="group" aria-label="Cómo ha ido ' + esc(it.name) + '">' + eff + '</div>' +
@@ -2042,6 +2051,7 @@ async function saveSession(){
     const ws = sets.map(p => p.w), known = ws.filter(w => w != null);
     const rec = { id:it.id, name:it.name, kind:it.kind, weight: known.length ? Math.max(...known) : null, sets: sets.map(p => p.r), effort: it.effort || null };
     const dn = String(it.dnote || '').trim(); if (dn) rec.note = dn;
+    const hole = HOLE_IDS.has(it.id) ? num(it.hole) : null; if (hole != null) rec.hole = hole;
     if (ws.some(w => w !== ws[0])) rec.weights = ws;
     items.push(rec);
   }
@@ -2076,7 +2086,10 @@ async function saveTestsAction(){
   const notes = {};
   for (const t of TESTS) { const n = String(dr.notes[t.id] || '').trim(); if (n) notes[t.id] = n; }
   const pesos = {};
-  for (const w of WORKING) { const l = lastEntry(w.id); if (l && l.item.weight != null) pesos[w.id] = l.item.weight; }
+  for (const w of WORKING) {
+    const l = [w.id].concat(w.alt || []).map(lastEntry).filter(Boolean).sort((a, b) => b.date.localeCompare(a.date))[0];
+    if (l && l.item.weight != null) pesos[w.id] = l.item.weight;
+  }
   const next = clone(S.tests); next[cp] = { date: dr.date || todayISO(), vals, notes, pesos };
   try {
     await store.saveTests(next); delete S.testDrafts[cp];
@@ -2405,6 +2418,7 @@ function onField(act, ds, val){
   switch (act) {
     case 'rep': curItem(ds.i).reps[Number(ds.s)] = val; saveDraftsSoon(); break;
     case 'setw': curItem(ds.i).setW[Number(ds.s)] = val; saveDraftsSoon(); break;
+    case 'hole': curItem(ds.i).hole = val; saveDraftsSoon(); break;
     case 'date': curDraft().date = val; saveDraftsSoon(); break;
     case 'note': curDraft().note = val; saveDraftsSoon(); break;
     case 'it-dnote': curItem(ds.i).dnote = val; saveDraftsSoon(); break;
