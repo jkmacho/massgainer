@@ -150,7 +150,11 @@ h1{ font-family:var(--display); font-weight:700; font-size:38px; line-height:1; 
 .sets.tm.nw .srow, .sets.tm.nw .shead{ grid-template-columns:28px minmax(0, 1fr) 76px 44px 46px; }
 .go{ width:44px; height:44px; border-radius:10px; border:1.5px solid var(--accent); background:var(--surface-2); color:var(--accent); display:grid; place-items:center; }
 .go svg{ width:20px; height:20px; }
-.go:disabled{ visibility:hidden; }
+.go.hide{ visibility:hidden; }
+.go:disabled{ opacity:.35; }
+.go.on{ background:var(--accent); color:var(--surface); animation:gopulse 1.2s ease-in-out infinite; }
+@keyframes gopulse{ 50%{ opacity:.6; } }
+@media (prefers-reduced-motion: reduce){ .go.on{ animation:none; } }
 .shead span{ font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); text-align:center; }
 .shead span:first-child{ text-align:left; }
 .srow{ border-radius:10px; padding:2px 0; }
@@ -383,7 +387,7 @@ label.sub{ font-weight:700; }
    Las 4 fases y las 5 semanas de pruebas se repiten cada temporada con las mismas fechas.
    La primera es la 2026-27; sus pruebas conservan los id de siempre (oct, nov…) */
 /* Versión de la app: tiene que ser igual que VERSION en sw.js */
-const APP_VERSION = 'v12';
+const APP_VERSION = 'v13';
 const SEASON0 = 2026;
 const PHASE_TPL = [
   { n:1, name:'Técnica y base',   start:'10-01', end:'11-22', reps:'2-3 × 10-15 reps' },
@@ -830,6 +834,13 @@ function discSums(discs){
   sums.delete(0); return Array.from(sums).sort((a, b) => a - b);
 }
 /* Ejercicios con una sola mancuerna: pueden llevar todos los discos (lista "mancuerna"; si está vacía, la de mancuernas) */
+/* Ejercicios que se hacen por pierna, brazo o lado: las reps (o los segundos) son de cada uno */
+const PER_SIDE = { zancada:'pierna', bulgara:'pierna', step_up:'pierna', remo_banco:'brazo', pallof:'lado', dead_bug:'lado', bird_dog:'lado', plancha_lat:'lado', kb_maleta:'lado' };
+function sideOf(it){
+  if (PER_SIDE[it.id]) return PER_SIDE[it.id];
+  const m = /(?:reps|segundos) por (pierna|brazo|lado)/i.exec(it.note || '');
+  return m ? m[1].toLowerCase() : null;
+}
 const ONE_DB = new Set(['goblet', 'remo_banco', 'pullover', 'triceps_nuca_manc', 'triceps_nuca_unilat', 'sentadilla_sumo', 'incl_lateral', 'press_banca_unilat', 'curl_concentrado']);
 const eqOf = id => ONE_DB.has(id) ? 'mancuerna' : (LIB.get(id) || {}).eq || null;
 const gearRaw = eq => (Array.isArray(S.gear[eq]) ? S.gear[eq] : eq === 'mancuerna' ? gearRaw('mancuernas') : []);
@@ -907,6 +918,7 @@ const ICON = {
   tests: svg('<circle cx="12" cy="13.5" r="7.5"/><path d="M12 10v3.5l2.5 2M9.5 2.5h5"/>'),
   plan: svg('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>'),
   play: svg('<path d="M8 5.5v13l11-6.5z" fill="currentColor"/>'),
+  stop: svg('<rect x="7" y="7" width="10" height="10" rx="1.5" fill="currentColor"/>'),
   check: svg('<path d="M5 12.5l4.5 4.5L19 7.5"/>', ' stroke-width="2.6"'),
   clock: svg('<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9.5 2.5h5"/>'),
   pin: svg('<path d="M12 16v6M9 3h6l-1 6 3 3v2H7v-2l3-3z"/>')
@@ -1203,13 +1215,20 @@ function wavURL(sec, f){
   for (let i = 0; i < n; i++) v.setInt16(44 + i * 2, Math.round(f(i / rate)), true);
   return URL.createObjectURL(new Blob([v.buffer], { type:'audio/wav' }));
 }
-/* Zumbido grave casi inaudible en bucle: mientras suena, Android no congela la página y el aviso llega a su hora */
-let aliveEl = null; const beepEls = {};
+/* Zumbido grave casi inaudible mientras corre un descanso: así Android no congela la página y el aviso llega a su hora.
+   Va por Web Audio y no con un <audio>, porque un <audio> pide el foco de audio y Android baja la música que esté sonando. */
+let aliveOsc = null; const beepEls = {};
 function keepAlive(on){
   try {
-    if (on) { if (!aliveEl) { aliveEl = new Audio(wavURL(2, t => 30 * Math.sin(2 * Math.PI * 50 * t))); aliveEl.loop = true; } aliveEl.play().catch(() => {}); }
-    else if (aliveEl) aliveEl.pause();
-  } catch (e) {}
+    if (on) {
+      unlockAudio();
+      if (!aliveOsc && audioCtx) {
+        const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+        o.frequency.value = 50; g.gain.value = 0.001; o.connect(g); g.connect(audioCtx.destination); o.start();
+        aliveOsc = o;
+      }
+    } else if (aliveOsc) { aliveOsc.stop(); aliveOsc.disconnect(); aliveOsc = null; }
+  } catch (e) { aliveOsc = null; }
 }
 /* El mismo pitido como fichero de audio, para cuando la app no está en primer plano (Web Audio puede estar parado) */
 function beepEl(ts){
@@ -1225,7 +1244,7 @@ function unlockAudio(){
   try { beepEl([0, 0.35, 0.7]); beepEl([0]); } catch (e) {}
 }
 function beep(ts = [0, 0.35, 0.7]){
-  if (document.hidden) { try { const a = beepEl(ts); a.currentTime = 0; a.play().catch(() => {}); } catch (e) {} return; }
+  if (document.hidden && !(audioCtx && audioCtx.state === 'running')) { try { const a = beepEl(ts); a.currentTime = 0; a.play().catch(() => {}); } catch (e) {} return; }
   try {
     unlockAudio();
     ts.forEach(t => {
@@ -1258,7 +1277,8 @@ function paintRest(){
     const left = Math.max(0, Math.ceil(((prep ? work.prepEnd : work.end) - now) / 1000));
     bar.classList.remove('done');
     document.getElementById('rest-count').textContent = clockText(left * 1000);
-    document.getElementById('rest-lab').textContent = prep ? 'Prepárate · ' + work.name : work.name + ' · serie ' + (work.s + 1);
+    document.getElementById('rest-lab').textContent = prep ? (work.side === 2 ? 'Cambia de lado · ' : 'Prepárate · ') + work.name
+      : work.name + ' · serie ' + (work.s + 1) + (work.sides ? ' · lado ' + work.side : '');
     document.getElementById('rest-fill').style.width = (prep ? 100 : Math.min(100, left / work.target * 100)) + '%';
     return;
   }
@@ -1292,23 +1312,28 @@ function adjustRest(sec){
 }
 function stopRest(){ clearInterval(timerId); timerId = null; timerEnd = 0; cancelWork(); keepAwake(false); paintRest(); }
 
-/* Tiempo efectivo (planchas…): 5 s para colocarse, cuenta atrás del objetivo y, al acabar, marca la serie y empieza el descanso */
+/* Tiempo efectivo (planchas…): 5 s para colocarse, cuenta atrás del objetivo y, al acabar, marca la serie y empieza el descanso.
+   En los ejercicios por lado (plancha lateral…) hace los dos lados seguidos, con 5 s para cambiar, y guarda el lado que menos aguantó. */
 let work = null, workId = null;
-const WORK_PREP = 5;
+const WORK_PREP = 5, WORK_SWITCH = 5;
 function startWork(i, s){
   const d = curDraft(), it = d.items[Number(i)], n = Number(s);
-  if (!it || it.done[n]) return;
+  if (!it || it.done[n] || work) return;
   const p = prevSet(lastEntry(it.id), n), typed = num(it.reps[n]);
   const target = typed > 0 ? typed : Math.round(p ? p.r : it.min);
   if (!(target > 0)) return;
-  stopRest(); cancelWork();
-  work = { key:S.active, i:Number(i), s:n, target, name:it.name, phase:'prep', prepEnd:Date.now() + WORK_PREP * 1000, end:0 };
+  stopRest();
+  work = { key:S.active, i:Number(i), s:n, target, name:it.name, sides:!!sideOf(it), side:1, held:null, phase:'prep', prepEnd:Date.now() + WORK_PREP * 1000, end:0 };
   workId = setInterval(workTick, 250);
-  unlockAudio(); keepAwake(true); paintRest();
+  unlockAudio(); keepAwake(true); render(); paintRest();
 }
 function cancelWork(){
   if (!work) return;
-  clearInterval(workId); workId = null; work = null; keepAwake(false); paintRest();
+  clearInterval(workId); workId = null; work = null; keepAwake(false); paintRest(); render();
+}
+/* Acaba el primer lado: guarda lo que aguantó y deja 5 s para colocarse del otro */
+function switchSide(held, at){
+  work.held = held; work.side = 2; work.phase = 'prep'; work.prepEnd = at + WORK_SWITCH * 1000;
 }
 function workTick(){
   if (!work) return;
@@ -1317,11 +1342,14 @@ function workTick(){
     work.phase = 'go'; work.end = work.prepEnd + work.target * 1000;
     if (now - work.prepEnd <= LATE) { beep([0]); try { if (navigator.vibrate) navigator.vibrate(200); } catch (e) {} }
   } else if (work.phase === 'go' && now >= work.end) {
-    if (now - work.end <= LATE) {
-      try { if (navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 300]); } catch (e) {}
-      beep();
+    const late = now - work.end > LATE;
+    if (work.sides && work.side === 1) {
+      if (!late) { beep([0, 0.35]); try { if (navigator.vibrate) navigator.vibrate([300, 150, 300]); } catch (e) {} }
+      switchSide(work.target, work.end);
+    } else {
+      if (!late) { try { if (navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 300]); } catch (e) {} beep(); }
+      finishWork(work.held != null ? Math.min(work.held, work.target) : work.target); return;
     }
-    finishWork(work.target); return;
   }
   paintRest();
 }
@@ -1329,18 +1357,24 @@ function workTick(){
 function finishWork(sec){
   const w = work; if (!w) return;
   clearInterval(workId); workId = null; work = null;
-  const d = S.drafts[w.key], it = d && d.items[w.i]; if (!it) { paintRest(); return; }
+  const d = S.drafts[w.key], it = d && d.items[w.i]; if (!it) { paintRest(); render(); return; }
   it.reps[w.s] = String(Math.max(1, Math.round(sec)));
   if (it.done[w.s]) { saveDrafts(); render(); return; }
   S.active = w.key; markDone(w.i, w.s);
   if (!timerId && !work) keepAwake(false);
 }
-/* Parar antes de tiempo: se guardan los segundos que de verdad aguantó */
+/* Parar antes de tiempo: se guardan los segundos que de verdad aguantó (en el primer lado, pasa al segundo) */
 function stopWork(){
   if (!work) return;
-  if (work.phase === 'prep') { cancelWork(); return; }
+  const now = Date.now();
+  if (work.phase === 'prep') {
+    if (work.side === 1) cancelWork(); else finishWork(work.held);
+    return;
+  }
+  const held = work.target - (work.end - now) / 1000;
   beep([0]);
-  finishWork(work.target - (work.end - Date.now()) / 1000);
+  if (work.sides && work.side === 1) { switchSide(held, now); paintRest(); return; }
+  finishWork(work.held != null ? Math.min(work.held, held) : held);
 }
 function viewRest(){
   return '<div id="restbar" class="restbar" hidden role="timer" aria-live="polite"><div id="rest-fill" class="rest-fill"></div><div class="rest-in">' +
@@ -1373,11 +1407,17 @@ function trainMeta(){
 
 const RESTS = [60, 90, 120, 180];
 const restLabel = sec => sec % 60 ? sec + ' s' : (sec / 60) + ' min';
+function goBtn(k, i, s, done){
+  if (done) return '<button class="go hide" disabled aria-hidden="true" tabindex="-1">' + ICON.play + '</button>';
+  const on = work && work.key === k && work.i === i && work.s === s;
+  if (on) return '<button class="go on" data-act="work-stop" aria-label="Parar la serie ' + (s + 1) + '">' + ICON.stop + '</button>';
+  return '<button class="go" data-act="work-start" data-i="' + i + '" data-s="' + s + '" aria-label="Empezar cuenta atrás de la serie ' + (s + 1) + '"' + (work ? ' disabled' : '') + '>' + ICON.play + '</button>';
+}
 function viewEx(it, i, k){
   if (it.skip) {
     return '<section class="card ex is-skipped"><div class="ex-top"><h3>' + esc(it.name) + '</h3><button class="btn-text" data-act="skip" data-i="' + i + '">Recuperar</button></div><p class="small muted">Hoy no lo hace.</p></section>';
   }
-  const last = lastEntry(it.id), sug = suggest(it, last), isTime = it.kind === 'time', showW = showWeight(it);
+  const last = lastEntry(it.id), sug = suggest(it, last), isTime = it.kind === 'time', showW = showWeight(it), side = sideOf(it);
   const range = it.min === it.max ? String(it.min) : it.min + '-' + it.max;
   const allDone = it.done.length > 0 && it.done.every(Boolean);
   const pending = it.reps.map((_, s) => s).filter(s => !it.done[s]);
@@ -1390,7 +1430,7 @@ function viewEx(it, i, k){
       (p ? '<button class="prev" data-act="prev" data-i="' + i + '" data-s="' + s + '" aria-label="Copiar la última vez: ' + esc(pTxt) + '">' + esc(pTxt) + '</button>' : '<span class="prev none" aria-hidden="true">—</span>') +
       (showW ? '<input class="cell" type="text" inputmode="decimal" autocomplete="off" id="w-' + id + '" data-key="w-' + id + '" data-act="setw" data-i="' + i + '" data-s="' + s + '" value="' + esc(it.setW[s]) + '" placeholder="kg" aria-label="Kg de la serie ' + (s + 1) + '">' : '') +
       '<input class="cell" type="text" inputmode="numeric" autocomplete="off" id="r-' + id + '" data-key="r-' + id + '" data-act="rep" data-i="' + i + '" data-s="' + s + '" value="' + esc(v) + '" placeholder="' + esc(ghost) + '" aria-label="' + (isTime ? 'Segundos' : 'Repeticiones') + ' de la serie ' + (s + 1) + '">' +
-      (isTime ? '<button class="go" data-act="work-start" data-i="' + i + '" data-s="' + s + '" aria-label="Empezar cuenta atrás de la serie ' + (s + 1) + '"' + (it.done[s] ? ' disabled' : '') + '>' + ICON.play + '</button>' : '') +
+      (isTime ? goBtn(k, i, s, it.done[s]) : '') +
       '<button class="check" data-act="done" data-i="' + i + '" data-s="' + s + '" aria-pressed="' + !!it.done[s] + '" aria-label="Serie ' + (s + 1) + ' hecha">' + ICON.check + '</button></div>';
   }).join('');
   const canDel = it.reps.length > 1 && !it.done[it.reps.length - 1];
@@ -1400,7 +1440,7 @@ function viewEx(it, i, k){
     : ssB ? '<p class="ex-ss">Superserie con <b>' + esc(pv.name) + '</b>: el descanso va después de cada serie de este.</p>' : '';
   const eff = [['facil', 'Fácil'], ['justo', 'Justo'], ['duro', 'Duro']].map(p => '<button class="chip chip-' + p[0] + '" data-act="effort" data-i="' + i + '" data-v="' + p[0] + '" aria-pressed="' + (it.effort === p[0]) + '">' + p[1] + '</button>').join('');
   return '<section class="card ex' + (allDone ? ' is-done' : '') + (ssA ? ' ss-a' : '') + (ssB ? ' ss-b' : '') + '">' +
-    '<div class="ex-top"><h3><button class="ex-name" data-act="fx-open" data-v="' + esc(it.id) + '">' + thumb(it.id, 'ex-thumb') + '<span>' + esc(it.name) + '</span></button></h3><span class="tag">' + (allDone ? '✓ ' : '') + it.n + ' × ' + range + (isTime ? ' s' : '') + '</span></div>' +
+    '<div class="ex-top"><h3><button class="ex-name" data-act="fx-open" data-v="' + esc(it.id) + '">' + thumb(it.id, 'ex-thumb') + '<span>' + esc(it.name) + '</span></button></h3><span class="tag">' + (allDone ? '✓ ' : '') + it.n + ' × ' + range + (isTime ? ' s' : '') + (side ? ' por ' + side : '') + '</span></div>' +
     (it.note ? '<p class="ex-note">' + esc(it.note) + '</p>' : '') +
     ssTxt + (it.rest && it.rest !== S.restSec ? '<p class="ex-rest">' + ICON.clock + 'Descanso ' + restLabel(it.rest) + '</p>' : '') + exNotesView(it, i, k, last) +
     '<div class="sug"><span>' + esc(sug.text) + '</span>' + useBtn + '</div>' +
