@@ -826,7 +826,10 @@ function entryText(it){
 /* Material de casa. Mancuernas: barra de 2 kg + discos de 1 y 2 kg (de 2 a 8 kg cada una).
    Una kettlebell de 5 kg. Barras olímpicas de 20 y 13 kg con sus discos, que también cargan la polea de la jaula */
 const BAR_DISCS = [0.5, 0.5, 1.25, 1.25, 2.5, 2.5, 5, 5, 5, 5, 10, 10, 15, 15, 20, 20];
-const DEFAULT_GEAR = { mancuernas:[2, 3, 4, 5, 6, 7, 8], mancuerna:[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14], kettlebell:[5], polea: BAR_DISCS.slice(), barra_olimpica:[13, 20], discos: BAR_DISCS.slice() };
+/* Mancuernas ajustables de 2,5 a 24 kg (15 posiciones; faltan por leer las dos entre 11,5 y 18,5) junto a las de rosca de 2 a 8 kg */
+const ADJ_DB = [2.5, 3.5, 5, 6, 7, 8, 9.5, 10.5, 11.5, 18.5, 20.5, 23, 24];
+const mergeW = (...ls) => Array.from(new Set([].concat(...ls))).sort((x, y) => x - y);
+const DEFAULT_GEAR = { mancuernas: mergeW([2, 3, 4, 5, 6, 7, 8], ADJ_DB), mancuerna: mergeW([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14], ADJ_DB), kettlebell:[5], polea: BAR_DISCS.slice(), barra_olimpica:[13, 20], discos: BAR_DISCS.slice() };
 /* [material, nombre, ayuda, discos]. Con discos se apuntan los discos y los pesos posibles son sus sumas */
 const GEAR = [['mancuernas', 'Mancuernas', 'kg de cada mancuerna'], ['mancuerna', 'Una sola mancuerna', 'kg montando una con todos los discos'], ['kettlebell', 'Kettlebell', 'kg de cada kettlebell'],
   ['polea', 'Polea', 'discos que tenéis', true], ['barra_olimpica', 'Barras olímpicas', 'kg de cada barra'], ['discos', 'Discos de barra', 'todos los discos', true]];
