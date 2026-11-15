@@ -389,7 +389,7 @@ label.sub{ font-weight:700; }
    Las 4 fases y las 5 semanas de pruebas se repiten cada temporada con las mismas fechas.
    La primera es la 2026-27; sus pruebas conservan los id de siempre (oct, nov…) */
 /* Versión de la app: tiene que ser igual que VERSION en sw.js */
-const APP_VERSION = 'v14';
+const APP_VERSION = 'v15';
 const SEASON0 = 2026;
 const PHASE_TPL = [
   { n:1, name:'Técnica y base',   start:'10-01', end:'11-22', reps:'2-3 × 10-15 reps' },
@@ -628,12 +628,103 @@ function lastProfile(){
   try { const l = JSON.parse(localStorage.getItem(LAST_KEY) || 'null'); return l && Date.now() - l.t < RESUME_MS && PROFILES.some(p => p[0] === l.id) ? l.id : null; } catch (e) { return null; }
 }
 const profileName = () => (PROFILES.find(p => p[0] === PROFILE) || ['', ''])[1];
-const SHARED_KEYS = ['gear', 'restSec'];
+const SHARED_KEYS = ['gear', 'restSec', 'cloud'];
 const lsKey = k => 'diarioEric:' + (PROFILE && PROFILE !== 'eric' && SHARED_KEYS.indexOf(k) < 0 ? PROFILE + ':' : '') + k;
 const LS = {
   get(k, d){ try { const v = localStorage.getItem(lsKey(k)); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
   set(k, v){ try { localStorage.setItem(lsKey(k), JSON.stringify(v)); return true; } catch (e) { return false; } }
 };
+
+/* ---------- Nube (Firebase, opcional) ----------
+   Sin entrar con Google, todo sigue en el móvil. Con la nube activa, los datos van a Firestore (proyecto de Juan),
+   que guarda copia en el móvil y sube lo pendiente al volver la conexión. La config no es secreta: protegen las reglas por uid. */
+const FB_CONFIG = { apiKey:'AIzaSyABu45Ook3RD9vfLbOG6uwNTQfRl9uGfUE', authDomain:'massgainer-6da3f.firebaseapp.com', projectId:'massgainer-6da3f',
+  storageBucket:'massgainer-6da3f.firebasestorage.app', messagingSenderId:'330563049505', appId:'1:330563049505:web:c2f6a33ed16b27b400ab60' };
+const FB_SDK = 'https://www.gstatic.com/firebasejs/10.12.2/';
+const cloudOn = () => LS.get('cloud', false) === true;
+let fbPromise = null;
+function loadScript(src){
+  return new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = src; sc.onload = res; sc.onerror = () => rej(new Error('sin conexión')); document.head.appendChild(sc); });
+}
+function fbLoad(){
+  if (!fbPromise) fbPromise = (async () => {
+    for (const f of ['firebase-app-compat.js', 'firebase-auth-compat.js', 'firebase-firestore-compat.js']) await loadScript(FB_SDK + f);
+    const app = firebase.apps.length ? firebase.app() : firebase.initializeApp(FB_CONFIG);
+    const db = app.firestore();
+    db.settings({ ignoreUndefinedProperties:true });
+    try { await db.enablePersistence({ synchronizeTabs:true }); } catch (e) {}
+    const auth = app.auth();
+    const user = await new Promise(res => { const un = auth.onAuthStateChanged(u => { un(); res(u); }); });
+    return { db, auth, user };
+  })().catch(e => { fbPromise = null; throw e; });
+  return fbPromise;
+}
+/* Rutas de un perfil: las mismas que en la db de Claude */
+function profileRefs(db, uid){
+  const base = 'data/users/' + uid, sfx = isEric() ? '' : '_' + PROFILE, cfg = db.doc(base + '/config' + sfx);
+  return { cfg, sessions: cfg.collection('sessions'), tests: db.doc(base + '/tests' + sfx), notes: db.doc(base + '/notes' + sfx), gear: db.doc(base + '/gear'), ficha: db.doc(base + '/ficha' + sfx) };
+}
+/* Sube lo que hay en este móvil para el perfil actual: las sesiones que falten (por id, así no se duplican)
+   y el plan, pruebas, notas, ficha y material solo si en la nube aún no hay. Devuelve cuántas sesiones ha subido */
+async function cloudUpload(db, uid){
+  const r = profileRefs(db, uid);
+  const [cfgS, sesS, tesS, notS, ficS, gearS] = await Promise.all([r.cfg.get(), r.sessions.get(), r.tests.get(), r.notes.get(), r.ficha.get(), r.gear.get()]);
+  const have = new Set(), haveC = new Set();
+  sesS.forEach(d => { have.add(d.id); const c = d.data() || {}; if (c.createdAt) haveC.add(c.createdAt); });
+  const ops = [];
+  for (const sess of (LS.get('sessions', []) || [])) {
+    const id = sess.id || newId();
+    if (have.has(id) || (sess.createdAt && haveC.has(sess.createdAt))) continue;
+    const body = Object.assign({}, sess); delete body.id;
+    ops.push([r.sessions.doc(id), body]);
+  }
+  const n = ops.length, now = Date.now(), c = LS.get('config', null);
+  if (!cfgS.exists && c && c.templates) ops.push([r.cfg, { templates: c.templates, phasesApplied: c.phasesApplied || [], prev: c.prev || null, updatedAt: now }]);
+  const t = LS.get('tests', null); if (!tesS.exists && t && Object.keys(t).length) ops.push([r.tests, { values: t, updatedAt: now }]);
+  const no = LS.get('exNotes', null); if (!notS.exists && no && Object.keys(no).length) ops.push([r.notes, { values: no, updatedAt: now }]);
+  const fi = LS.get('ficha', null); if (!ficS.exists && fi) ops.push([r.ficha, { values: fi, updatedAt: now }]);
+  const g = LS.get('gear', null); if (!gearS.exists && g) ops.push([r.gear, { values: g, updatedAt: now }]);
+  for (let i = 0; i < ops.length; i += 400) { const b = db.batch(); ops.slice(i, i + 400).forEach(o => b.set(o[0], o[1])); await b.commit(); }
+  return n;
+}
+async function cloudSignIn(){
+  if (S.cloudBusy) return;
+  S.cloudBusy = true; render();
+  try {
+    const fb = await fbLoad();
+    const res = await fb.auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
+    const n = await cloudUpload(fb.db, res.user.uid);
+    LS.set('cloud', true);
+    toast(n ? 'Nube activada: ' + n + (n === 1 ? ' sesión subida' : ' sesiones subidas') : 'Nube activada');
+    setTimeout(() => location.reload(), 900);
+  } catch (e) {
+    S.cloudBusy = false;
+    const code = (e && e.code) || '';
+    toast(code.indexOf('popup-closed') >= 0 || code.indexOf('cancelled') >= 0 ? 'No se ha entrado' : 'No se ha podido activar la nube: ' + ((e && e.message) || 'inténtalo de nuevo'));
+    render();
+  }
+}
+async function cloudUploadAction(){
+  if (S.cloudBusy || !store.fb) return;
+  S.cloudBusy = true; render();
+  try { const n = await cloudUpload(store.fb.db, store.fb.uid); toast(n ? n + (n === 1 ? ' sesión subida' : ' sesiones subidas') : 'No había nada nuevo que subir'); }
+  catch (e) { toast('No se ha podido subir: ' + ((e && e.message) || 'sin conexión')); }
+  S.cloudBusy = false; render();
+}
+async function cloudSignOut(){
+  try { const fb = await fbLoad(); await fb.auth.signOut(); } catch (e) {}
+  LS.set('cloud', false); toast('Nube desactivada: los datos se guardan solo en este móvil');
+  setTimeout(() => location.reload(), 900);
+}
+/* Con la nube, lo que llega se copia también en el móvil: si un día se sale de la nube o no carga, están los datos */
+/* Solo cuando han llegado los 6 documentos y el perfil ya está en la nube: si no, se borraría lo que hay en el móvil */
+function mirrorLocal(){
+  if (!store.fb || S.cloudEmpty || store.seen.size < 6) return;
+  LS.set('sessions', S.sessions); LS.set('config', { templates: S.templates, phasesApplied: S.phasesApplied, prev: S.prevCfg });
+  LS.set('tests', S.tests); LS.set('exNotes', S.exNotes); LS.set('ficha', S.ficha); LS.set('gear', S.gear);
+}
+let mirrorT = null;
+const mirrorSoon = k => { if (!store.fb) return; store.seen.add(k); clearTimeout(mirrorT); mirrorT = setTimeout(mirrorLocal, 1500); };
 
 const caps = {};
 function getCap(name){
@@ -658,42 +749,49 @@ function restoreDrafts(){
 
 /* ---------- Almacenamiento: db de Claude o, si no hay, este navegador ---------- */
 const store = {
-  mode:'loading', refs:null,
+  mode:'loading', refs:null, fb:null, seen:new Set(),
   async init(){
     let db = null, user = null, uid = null;
     try { [db, user] = await Promise.all([getCap('db'), getCap('user')]); } catch (e) {}
     if (db && user) { try { uid = await user.id(); } catch (e) {} }
+    if (!(db && uid) && cloudOn()) {
+      try {
+        const fb = await fbLoad();
+        if (fb.user) { db = fb.db; uid = fb.user.uid; this.fb = { db, uid, email: fb.user.email || '' }; }
+        else S.cloudMsg = 'La sesión de Google se ha cerrado: entra otra vez en Ajustes. Mientras, se guarda solo en este móvil.';
+      } catch (e) { S.cloudMsg = 'Sin conexión con la nube: lo que guardes ahora se queda solo en este móvil. Luego, en Ajustes, "Subir lo de este móvil".'; }
+    }
     if (db && uid) {
       this.mode = 'db';
-      const base = 'data/users/' + uid, sfx = isEric() ? '' : '_' + PROFILE;
-      const cfg = db.doc(base + '/config' + sfx);
-      this.refs = { cfg, sessions: cfg.collection('sessions'), tests: db.doc(base + '/tests' + sfx), notes: db.doc(base + '/notes' + sfx), gear: db.doc(base + '/gear'), ficha: db.doc(base + '/ficha' + sfx) };
-      this.refs.ficha.onSnapshot(snap => { const d = snap.exists ? snap.data() : null; S.ficha = normFicha(d && d.values); render(); }, err => dbFail(err));
+      this.refs = profileRefs(db, uid);
+      const cfg = this.refs.cfg;
+      this.refs.ficha.onSnapshot(snap => { const d = snap.exists ? snap.data() : null; S.ficha = normFicha(d && d.values); render(); mirrorSoon('ficha'); }, err => dbFail(err));
       this.refs.sessions.onSnapshot(snap => {
         S.sessions = snap.docs.map(d => Object.assign({ id: d.id }, clone(d.data() || {})));
-        S.loaded.sessions = true; render();
+        S.loaded.sessions = true; render(); mirrorSoon('sessions');
       }, err => dbFail(err));
       cfg.onSnapshot(snap => {
         const d = snap.exists ? snap.data() : null;
         if (d && d.templates && d.templates.A && d.templates.B) S.templates = clone(d.templates);
         S.phasesApplied = d && Array.isArray(d.phasesApplied) ? d.phasesApplied.slice() : [];
         S.prevCfg = d && d.prev && d.prev.templates ? clone(d.prev) : null;
-        S.loaded.cfg = true; render(); migrateDeadlift();
+        S.cloudEmpty = !!store.fb && !snap.exists;
+        S.loaded.cfg = true; render(); mirrorSoon('cfg'); migrateDeadlift();
       }, err => dbFail(err));
       this.refs.notes.onSnapshot(snap => {
         const d = snap.exists ? snap.data() : null;
         S.exNotes = d && d.values ? clone(d.values) : {};
-        render();
+        render(); mirrorSoon('notes');
       }, err => dbFail(err));
       this.refs.tests.onSnapshot(snap => {
         const d = snap.exists ? snap.data() : null;
         S.tests = d && d.values ? clone(d.values) : {};
-        render();
+        render(); mirrorSoon('tests');
       }, err => dbFail(err));
       this.refs.gear.onSnapshot(snap => {
         const d = snap.exists ? snap.data() : null;
         S.gear = d && d.values ? clone(d.values) : clone(DEFAULT_GEAR);
-        render();
+        render(); mirrorSoon('gear');
       }, err => dbFail(err));
       setTimeout(() => { if (!S.loaded.sessions || !S.loaded.cfg) { S.loaded.sessions = S.loaded.cfg = true; S.dbError = 'Los datos tardan en cargar. Revisa la conexión y vuelve a abrir el diario.'; render(); } }, 12000);
     } else {
@@ -714,6 +812,7 @@ const store = {
     }
   },
   async retry(fn){
+    if (this.fb) { Promise.resolve().then(fn).catch(e => toast('No se ha podido guardar en la nube: ' + ((e && e.message) || 'error'))); return; }
     try { return await fn(); }
     catch (e) {
       if (e && e.code === 'unavailable') { await new Promise(r => setTimeout(r, 500 + Math.random() * 900)); return await fn(); }
@@ -1425,6 +1524,8 @@ function header(title, meta){
     ' <button class="btn-text who" data-act="profile-change">Cambiar</button>';
   let notice = '';
   if (S.dbError) notice = '<p class="notice warn">' + esc(S.dbError) + '</p>';
+  else if (S.cloudMsg && store.mode === 'local') notice = '<p class="notice warn">' + esc(S.cloudMsg) + '</p>';
+  else if (S.cloudEmpty && (LS.get('sessions', []) || []).length && S.tab !== 'plan') notice = '<p class="notice">Este perfil aún no está en la nube y este móvil tiene datos suyos.<button class="btn-text" data-act="tab" data-v="plan">Subirlos</button></p>';
   else if (ready() && ph && !ph.summer && changesFor(ph.season, ph.n) && !isApplied(ph.season, ph.n) && S.tab !== 'plan') notice = ph.n === 1
     ? '<p class="notice">Empieza la temporada ' + seasonName(ph.season) + '. Buen momento para revisar el plan y pasar a la fase 1.<button class="btn-text" data-act="tab" data-v="plan">Ver plan</button></p>'
     : '<p class="notice warn">Ya estáis en la fase ' + ph.n + ' y los ejercicios siguen en la anterior.<button class="btn-text" data-act="tab" data-v="plan">Pasar de fase</button></p>';
@@ -2010,14 +2111,28 @@ function viewVersion(){
   return (newer ? '<p class="notice warn">Hay una versión nueva (' + esc(latestVersion) + '). Cierra la app del todo y vuelve a abrirla.</p>' : '') +
     '<p class="small muted" style="text-align:center;margin:18px 0 4px">Diario de fuerza · versión ' + APP_VERSION + (latestVersion && !newer ? ' (la última)' : '') + '</p>';
 }
+function viewCloud(){
+  if (store.mode === 'db' && !store.fb) return '';
+  const busy = S.cloudBusy ? ' disabled' : '';
+  if (store.fb) {
+    const nLocal = (LS.get('sessions', []) || []).length;
+    return '<h2 class="section-title">Nube</h2><section class="card">' +
+      '<p class="small">Activada con <strong>' + esc(store.fb.email || 'tu cuenta de Google') + '</strong>. Lo que se guarda va a la nube y se ve en los móviles que entren con esa cuenta. Sin conexión sigue funcionando y sube lo pendiente al volver.</p>' +
+      '<div class="row"><button class="btn-soft" data-act="cloud-upload"' + busy + '>Subir lo de este móvil</button><button class="btn-text muted" data-act="cloud-out"' + busy + '>Salir de la nube</button></div>' +
+      '<p class="small muted">"Subir lo de este móvil" añade las sesiones guardadas aquí que aún no estén en la nube (no duplica). Al salir, este móvil vuelve a guardar solo en local con lo último que tenía.</p></section>';
+  }
+  return '<h2 class="section-title">Nube</h2><section class="card">' +
+    '<p class="small">Opcional. Ahora todo se guarda solo en este móvil. Si entras con Google, los datos de este perfil se suben a la nube y se pueden ver desde otros móviles con la misma cuenta. Sin conexión sigue funcionando.</p>' +
+    '<div class="row"><button class="btn-primary" data-act="cloud-in"' + busy + '>' + (S.cloudBusy ? 'Entrando…' : 'Entrar con Google') + '</button></div></section>';
+}
 function viewBackup(){
   const lb = LS.get('lastBackup', null), pi = S.pendingImport;
   const confirm = pi ? '<div class="notice warn" style="flex-direction:column;align-items:stretch"><p>La copia es del <strong>' + esc(fmtLong(pi.exportedAt.slice(0, 10))) + '</strong> y tiene ' + pi.data.sessions.length + ' ' + (pi.data.sessions.length === 1 ? 'sesión' : 'sesiones') + '. Sustituye todo lo que hay ahora en este móvil: sesiones, plan y pruebas.</p>' +
     '<button class="btn-primary" data-act="import-ok">Sustituir por la copia</button><button class="btn-text muted" data-act="import-cancel">Cancelar</button></div>' : '';
-  return '<h2 class="section-title">Copia de seguridad</h2><section class="card">' +
-    '<p class="small">Todo se guarda en este móvil. La copia es un fichero para recuperar los datos si cambias de móvil o se borra el navegador. Se guarda en la carpeta Descargas con el botón <strong>Hacer copia</strong>.</p>' +
+  return viewCloud() + '<h2 class="section-title">Copia de seguridad</h2><section class="card">' +
+    '<p class="small">' + (store.fb ? 'Además de la nube, se guarda una copia en este móvil.' : 'Todo se guarda en este móvil.') + ' La copia es un fichero para recuperar los datos si cambias de móvil o se borra el navegador. Se guarda en la carpeta Descargas con el botón <strong>Hacer copia</strong>.</p>' +
     '<p class="small muted">' + (lb ? 'Última copia: ' + esc(fmtLong(lb)) + '.' : 'Aún no has hecho ninguna copia.') + '</p>' +
-    (store.mode === 'local' ? '<button class="switch" role="switch" data-act="auto-backup" aria-checked="' + autoBackupOn() + '"><span>Copia automática: ' + (autoBackupOn() ? 'activada' : 'desactivada') + '</span><span class="track" aria-hidden="true"></span></button>' +
+    (store.mode === 'local' || store.fb ? '<button class="switch" role="switch" data-act="auto-backup" aria-checked="' + autoBackupOn() + '"><span>Copia automática: ' + (autoBackupOn() ? 'activada' : 'desactivada') + '</span><span class="track" aria-hidden="true"></span></button>' +
       '<p class="small muted">' + (autoBackupOn() ? 'Al guardar cada sesión o prueba se descarga una copia en la carpeta Descargas del móvil. Sirve si se borra el navegador, pero no si se pierde el móvil: de vez en cuando pasa alguna copia al ordenador.' : 'Desactivada: solo se hace copia con el botón de abajo.') + '</p>' : '') +
     '<div class="row"><button class="btn-soft" data-act="backup">Hacer copia</button><button class="btn-soft" data-act="import">Recuperar copia</button>' +
     '<input type="file" id="import-file" accept=".json,.txt,application/json,text/plain" data-act="import-file" hidden></div>' + confirm + '</section>';
@@ -2188,7 +2303,7 @@ async function saveFile(filename, data){
 const backupDue = () => { const lb = LS.get('lastBackup', null); return !lb || lb < addDays(todayISO(), -30); };
 const backupBody = () => ({ app:'diarioEric', version:1, profile: PROFILE, exportedAt: new Date().toISOString(), sessions: S.sessions,
   config: { templates: S.templates, phasesApplied: S.phasesApplied, prev: S.prevCfg }, tests: S.tests, exNotes: S.exNotes, gear: S.gear, ficha: S.ficha });
-const autoBackupOn = () => store.mode === 'local' && LS.get('autoBackup', true) !== false;
+const autoBackupOn = () => (store.mode === 'local' || !!store.fb) && LS.get('autoBackup', true) !== false;
 /* Copia automática al guardar: va a Descargas sin preguntar. Devuelve true si se ha hecho */
 async function autoBackup(){
   if (!autoBackupOn()) return false;
@@ -2218,6 +2333,7 @@ function readImport(file){
 }
 async function importAction(){
   const d = S.pendingImport && S.pendingImport.data; if (!d) return;
+  if (store.fb) { toast('Con la nube activa no se puede recuperar una copia: sal de la nube primero'); return; }
   if (store.mode !== 'local') { toast('Recuperar copia solo funciona en la app instalada'); return; }
   const c = d.config || {};
   if (!LS.set('sessions', d.sessions)) { toast('No hay espacio en este móvil'); return; }
@@ -2395,6 +2511,9 @@ function onClick(act, ds){
     case 'rest-adj': adjustRest(Number(ds.v)); break;
     case 'rest-skip': stopRest(); break;
     case 'work-start': startWork(ds.i, ds.s); break;
+    case 'cloud-in': cloudSignIn(); break;
+    case 'cloud-upload': cloudUploadAction(); break;
+    case 'cloud-out': cloudSignOut(); break;
     case 'work-stop': stopWork(); break;
     case 'work-cancel': cancelWork(); break;
     case 'save': if (!S.saving) saveSession(); break;

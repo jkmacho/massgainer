@@ -1,6 +1,6 @@
 // Service worker del diario: funciona sin conexión.
 // Al publicar una versión nueva, subir VERSION para que el móvil la recoja.
-const VERSION = 'v14';
+const VERSION = 'v15';
 const CACHE = 'diario-eric-' + VERSION;
 const SHELL = ['./', 'index.html', 'ejercicios.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png'];
 
@@ -37,6 +37,8 @@ self.addEventListener('fetch', e => {
   const url = new URL(req.url);
   // sw.js siempre de la red: la página lo lee para saber si hay versión nueva
   if (url.pathname.endsWith('/sw.js')) return;
+  // La nube (Firestore, inicio de sesión de Google) va siempre directa a la red; las librerías de gstatic sí se guardan
+  if (/(^|\.)(googleapis\.com|firebaseapp\.com|google\.com|firebaseio\.com)$/.test(url.hostname)) return;
 
   // La página: primero la red (así llegan las versiones nuevas), sin conexión la guardada
   if (req.mode === 'navigate') {
