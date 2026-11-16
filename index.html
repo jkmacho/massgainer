@@ -22,7 +22,8 @@
   --mus:#C3CCDA; --mus-n:#DEE3EB;
   --display:'Barlow Condensed', 'Arial Narrow', 'Roboto Condensed', system-ui, sans-serif;
   --body:'Atkinson Hyperlegible', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --nav-h:62px; --rest-h:76px; --r:14px;
+  --nav-h:62px; --rest-h:152px; --r:14px;
+  --curtain:rgba(38,71,181,.20); --curtain-work:rgba(214,110,0,.24); --curtain-edge:#2647B5; --curtain-edge-work:#C25E00;
   color-scheme:light;
 }
 @media (prefers-color-scheme: dark){
@@ -32,6 +33,7 @@
     --done:#45CF8C; --done-soft:rgba(69,207,140,.15); --on-done:#06140C;
     --gold:#F2C94C; --gold-soft:rgba(242,201,76,.18); --danger:#FF7A6E;
     --mus:#363E4C; --mus-n:#252A34;
+    --curtain:rgba(136,163,255,.26); --curtain-work:rgba(255,158,64,.26); --curtain-edge:#88A3FF; --curtain-edge-work:#FF9E40;
     color-scheme:dark;
   }
 }
@@ -41,6 +43,7 @@
   --done:#45CF8C; --done-soft:rgba(69,207,140,.15); --on-done:#06140C;
   --gold:#F2C94C; --gold-soft:rgba(242,201,76,.18); --danger:#FF7A6E;
   --mus:#363E4C; --mus-n:#252A34;
+  --curtain:rgba(136,163,255,.26); --curtain-work:rgba(255,158,64,.26); --curtain-edge:#88A3FF; --curtain-edge-work:#FF9E40;
   color-scheme:dark;
 }
 *,*::before,*::after{ box-sizing:border-box; }
@@ -258,15 +261,20 @@ h1{ font-family:var(--display); font-weight:700; font-size:38px; line-height:1; 
 .egrid input, .egrid select{ width:100%; }
 
 /* Barra de descanso */
-.restbar{ position:fixed; left:0; right:0; bottom:calc(var(--nav-h) + env(safe-area-inset-bottom, 0px)); z-index:19; background:var(--surface); border-top:1px solid var(--line); box-shadow:0 -6px 18px rgba(0,0,0,.08); }
-.rest-fill{ height:4px; background:var(--accent); transition:width .25s linear; }
-.restbar.done .rest-fill{ background:var(--done); }
-.rest-in{ max-width:640px; margin:0 auto; min-height:calc(var(--rest-h) - 4px); display:flex; align-items:center; justify-content:space-between; gap:10px;
+.restbar{ overflow:hidden; position:fixed; left:0; right:0; bottom:calc(var(--nav-h) + env(safe-area-inset-bottom, 0px)); z-index:19; background:var(--surface); border-top:1px solid var(--line); box-shadow:0 -6px 18px rgba(0,0,0,.08); }
+/* Cortina: el fondo de la barra se va recogiendo hacia la izquierda según pasa el tiempo (azul en descanso, naranja en la serie) */
+.rest-fill{ position:absolute; left:0; top:0; bottom:0; background:var(--curtain); border-right:3px solid var(--curtain-edge); transition:width .25s linear; pointer-events:none; }
+.restbar.work .rest-fill{ background:var(--curtain-work); border-right-color:var(--curtain-edge-work); }
+.restbar.done .rest-fill{ background:var(--done-soft); border-right-color:transparent; }
+.rest-in{ position:relative; max-width:640px; margin:0 auto; min-height:var(--rest-h); display:flex; flex-direction:column; justify-content:center; gap:8px; padding-top:8px; padding-bottom:10px;
   padding-left:max(16px, env(safe-area-inset-left, 0px)); padding-right:max(16px, env(safe-area-inset-right, 0px)); }
-.rest-txt{ display:flex; flex-direction:column; }
-.rest-count{ font-family:var(--display); font-weight:700; font-size:36px; line-height:1; font-variant-numeric:tabular-nums; }
-.restbar.done .rest-count{ color:var(--done); font-size:26px; animation:blink 1s steps(2) 3; }
-.rest-btns{ display:flex; gap:6px; }
+.rest-txt{ display:flex; flex-direction:column; align-items:center; text-align:center; }
+.rest-txt .lab{ font-size:15px; }
+.rest-count{ font-family:var(--display); font-weight:700; font-size:72px; line-height:.95; font-variant-numeric:tabular-nums; }
+.restbar.work .rest-count{ color:var(--curtain-edge-work); }
+.restbar.done .rest-count{ color:var(--done); font-size:44px; animation:blink 1s steps(2) 3; }
+.rest-btns{ display:flex; gap:8px; }
+.rest-btns button{ flex:1; }
 .rest-btns button{ min-height:44px; min-width:52px; border:1.5px solid var(--line); border-radius:10px; background:var(--surface-2); font-weight:700; font-size:14.5px; padding:4px 8px; }
 @keyframes blink{ 50%{ opacity:.3; } }
 
@@ -1409,7 +1417,7 @@ function paintRest(){
   if (work) {
     const prep = work.phase === 'prep', now = Date.now();
     const left = Math.max(0, Math.ceil(((prep ? work.prepEnd : work.end) - now) / 1000));
-    bar.classList.remove('done');
+    bar.classList.remove('done'); bar.classList.add('work');
     document.getElementById('rest-count').textContent = clockText(left * 1000);
     document.getElementById('rest-lab').textContent = prep ? (work.side === 2 ? 'Cambia de lado · ' : 'Prepárate · ') + work.name
       : work.name + ' · serie ' + (work.s + 1) + (work.sides ? ' · lado ' + work.side : '');
@@ -1417,7 +1425,7 @@ function paintRest(){
     return;
   }
   const left = timerLeft(), done = left === 0;
-  bar.classList.toggle('done', done);
+  bar.classList.remove('work'); bar.classList.toggle('done', done);
   document.getElementById('rest-minus').hidden = !!chain;
   document.getElementById('chain-stop').hidden = !chain;
   document.getElementById('rest-count').textContent = done ? '¡Siguiente serie!' : clockText(left * 1000);
