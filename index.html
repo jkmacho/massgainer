@@ -389,7 +389,7 @@ label.sub{ font-weight:700; }
    Las 4 fases y las 5 semanas de pruebas se repiten cada temporada con las mismas fechas.
    La primera es la 2026-27; sus pruebas conservan los id de siempre (oct, nov…) */
 /* Versión de la app: tiene que ser igual que VERSION en sw.js */
-const APP_VERSION = 'v15';
+const APP_VERSION = 'v16';
 const SEASON0 = 2026;
 const PHASE_TPL = [
   { n:1, name:'Técnica y base',   start:'10-01', end:'11-22', reps:'2-3 × 10-15 reps' },
@@ -1418,12 +1418,19 @@ function paintRest(){
   }
   const left = timerLeft(), done = left === 0;
   bar.classList.toggle('done', done);
+  document.getElementById('rest-minus').hidden = !!chain;
+  document.getElementById('chain-stop').hidden = !chain;
   document.getElementById('rest-count').textContent = done ? '¡Siguiente serie!' : clockText(left * 1000);
-  document.getElementById('rest-lab').textContent = done ? 'Descanso terminado' : 'Descanso';
+  document.getElementById('rest-lab').textContent = done ? 'Descanso terminado' : chain ? 'Descanso · luego serie ' + (chain.s + 1) : 'Descanso';
   document.getElementById('rest-fill').style.width = (done ? 100 : Math.min(100, left / timerTotal * 100)) + '%';
 }
 function tick(){
   paintRest();
+  if (timerId && chain) {
+    const left = timerLeft();
+    if (left > 0 && left <= 3 && chain.beeped !== left) { chain.beeped = left; if (timerEnd - Date.now() > 0) beep([0]); }
+    if (left === 0) { const c = chain, at = timerEnd; clearInterval(timerId); timerId = null; timerEnd = 0; chain = null; runChain(c, at); return; }
+  }
   if (timerId && timerLeft() === 0) {
     clearInterval(timerId); timerId = null;
     if (Date.now() - timerEnd <= LATE) {
@@ -1444,21 +1451,24 @@ function adjustRest(sec){
   if (!timerId) { startRest(Math.max(15, sec)); return; }
   timerEnd += sec * 1000; timerTotal = Math.max(timerTotal + sec, timerLeft(), 1); tick();
 }
-function stopRest(){ clearInterval(timerId); timerId = null; timerEnd = 0; cancelWork(); keepAwake(false); paintRest(); }
+function stopRest(){ chain = null; clearInterval(timerId); timerId = null; timerEnd = 0; cancelWork(); keepAwake(false); paintRest(); }
 
 /* Tiempo efectivo (planchas…): 5 s para colocarse, cuenta atrás del objetivo y, al acabar, marca la serie y empieza el descanso.
-   En los ejercicios por lado (plancha lateral…) hace los dos lados seguidos, con 5 s para cambiar, y guarda el lado que menos aguantó. */
-let work = null, workId = null;
+   En los ejercicios por lado (plancha lateral…) hace los dos lados seguidos, con 5 s para cambiar, y guarda el lado que menos aguantó.
+   Encadenado: tras el descanso arranca sola la siguiente serie del mismo ejercicio (pita 3-2-1 antes), hasta acabar las series.
+   Se corta con "Fin", con Cancelar o al marcar a mano otra serie. */
+let work = null, workId = null, chain = null;
 const WORK_PREP = 5, WORK_SWITCH = 5;
-function startWork(i, s){
+function startWork(i, s, at){
   const d = curDraft(), it = d.items[Number(i)], n = Number(s);
   if (!it || it.done[n] || work) return;
   const p = prevSet(lastEntry(it.id), n), typed = num(it.reps[n]);
   const target = typed > 0 ? typed : Math.round(p ? p.r : it.min);
   if (!(target > 0)) return;
   stopRest();
-  work = { key:S.active, i:Number(i), s:n, target, name:it.name, sides:!!sideOf(it), side:1, held:null, phase:'prep', prepEnd:Date.now() + WORK_PREP * 1000, end:0 };
+  work = { key:S.active, i:Number(i), s:n, target, name:it.name, sides:!!sideOf(it), side:1, held:null, phase:'prep', prepEnd:at || Date.now() + WORK_PREP * 1000, end:0 };
   workId = setInterval(workTick, 250);
+  if (at) workTick();
   unlockAudio(); keepAwake(true); render(); paintRest();
 }
 function cancelWork(){
@@ -1495,7 +1505,17 @@ function finishWork(sec){
   it.reps[w.s] = String(Math.max(1, Math.round(sec)));
   if (it.done[w.s]) { saveDrafts(); render(); return; }
   S.active = w.key; markDone(w.i, w.s);
+  const nx = it.done.findIndex((x, j) => !x && j > w.s);
+  if (timerId && nx >= 0) { chain = { key:w.key, i:w.i, s:nx, beeped:0 }; paintRest(); }
   if (!timerId && !work) keepAwake(false);
+}
+/* Fin del descanso encadenado: empieza ya la serie (si llega tarde, con los 5 s de preparación) */
+function runChain(c, at){
+  const d = S.drafts[c.key], it = d && d.items[c.i];
+  if (!it || it.done[c.s]) { keepAwake(false); paintRest(); return; }
+  S.active = c.key;
+  startWork(c.i, c.s, at && Date.now() - at <= LATE ? at : 0);
+  if (!work) { keepAwake(false); paintRest(); }
 }
 /* Parar antes de tiempo: se guardan los segundos que de verdad aguantó (en el primer lado, pasa al segundo) */
 function stopWork(){
@@ -1513,7 +1533,7 @@ function stopWork(){
 function viewRest(){
   return '<div id="restbar" class="restbar" hidden role="timer" aria-live="polite"><div id="rest-fill" class="rest-fill"></div><div class="rest-in">' +
     '<div class="rest-txt"><span id="rest-lab" class="lab">Descanso</span><span id="rest-count" class="rest-count"></span></div>' +
-    '<div id="rest-btns" class="rest-btns"><button data-act="rest-adj" data-v="-15" aria-label="Quitar 15 segundos">−15</button><button data-act="rest-adj" data-v="15" aria-label="Añadir 15 segundos">+15</button><button data-act="rest-skip">Saltar</button></div><div id="work-btns" class="rest-btns" hidden><button data-act="work-stop">Parar</button><button data-act="work-cancel">Cancelar</button></div>' +
+    '<div id="rest-btns" class="rest-btns"><button id="rest-minus" data-act="rest-adj" data-v="-15" aria-label="Quitar 15 segundos">−15</button><button data-act="rest-adj" data-v="15" aria-label="Añadir 15 segundos">+15</button><button data-act="rest-skip">Saltar</button><button id="chain-stop" data-act="chain-stop" hidden aria-label="Terminar el ejercicio, sin más series seguidas">Fin</button></div><div id="work-btns" class="rest-btns" hidden><button data-act="work-stop">Parar</button><button data-act="work-cancel">Cancelar</button></div>' +
   '</div></div>';
 }
 
@@ -2429,6 +2449,7 @@ async function exportCsv(){
 
 
 function markDone(i, s){
+  chain = null;
   const d = curDraft(), it = d.items[Number(i)];
   if (it.done[s]) { it.done[s] = false; saveDrafts(); render(); return; }
   if (isEmpty(it.reps[s])) {
@@ -2509,7 +2530,8 @@ function onClick(act, ds){
     case 'skip': { const it = curItem(ds.i); it.skip = !it.skip; saveDrafts(); render(); break; }
     case 'preset': S.restSec = Number(ds.v); LS.set('restSec', S.restSec); render(); break;
     case 'rest-adj': adjustRest(Number(ds.v)); break;
-    case 'rest-skip': stopRest(); break;
+    case 'rest-skip': { const c = chain; stopRest(); if (c) runChain(c, 0); break; }
+    case 'chain-stop': stopRest(); break;
     case 'work-start': startWork(ds.i, ds.s); break;
     case 'cloud-in': cloudSignIn(); break;
     case 'cloud-upload': cloudUploadAction(); break;
