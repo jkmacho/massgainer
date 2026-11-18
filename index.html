@@ -397,7 +397,7 @@ label.sub{ font-weight:700; }
    Las 4 fases y las 5 semanas de pruebas se repiten cada temporada con las mismas fechas.
    La primera es la 2026-27; sus pruebas conservan los id de siempre (oct, nov…) */
 /* Versión de la app: tiene que ser igual que VERSION en sw.js */
-const APP_VERSION = 'v17';
+const APP_VERSION = 'v18';
 const SEASON0 = 2026;
 const PHASE_TPL = [
   { n:1, name:'Técnica y base',   start:'10-01', end:'11-22', reps:'2-3 × 10-15 reps' },
@@ -1017,6 +1017,16 @@ function suggest(it, last){
     if (it.id === 'bajadas') return { text:'Prueba su primera dominada', weight:null };
     if (it.kind === 'time') return { text:'Intenta ' + (it.max + 5) + ' s o más', weight:null };
     return { text: step > 0 ? 'Prueba a añadir algo de peso' : 'Suma repeticiones o pasa a una versión más difícil', weight:null };
+  }
+  if (eff === 'facil') {
+    /* Te sobró: si ya estabas en la mitad alta del rango, sube peso; si no, suma 2 reps (o más segundos) en vez de 1 */
+    const mid = it.min + Math.ceil((it.max - it.min) / 2), more = isEric() ? 1 : 2, moreT = isEric() ? 5 : 10;
+    if (w && w > 0 && step > 0 && it.kind !== 'time' && sets.length >= it.n && sets.every(v => v >= mid)) {
+      const g = nextGear(it.id, w, step);
+      if (g !== null) { const nw = g !== undefined ? g : Math.round((w + step) * 10) / 10; return { text:'Te sobró: sube a ' + fmtW(nw), weight:nw }; }
+    }
+    if (it.kind === 'time') return { text: (w ? 'Repite ' + fmtW(w) + ' y ' : '') + 'te sobró: suma ' + moreT + ' s', weight: w == null ? null : w };
+    return { text: (w ? 'Repite ' + fmtW(w) + ' y ' : '') + 'te sobró: suma ' + more + (more === 1 ? ' rep' : ' reps'), weight: w == null ? null : w };
   }
   if (eff === 'duro') return { text: w ? 'Repite ' + fmtW(w) + ' hasta que salga "justo"' : 'Repite hasta que salga "justo"', weight: w == null ? null : w };
   if (it.kind === 'time') return { text: w ? 'Repite ' + fmtW(w) + ' y suma unos segundos' : 'Suma unos segundos', weight: w == null ? null : w };
@@ -2111,7 +2121,7 @@ function viewPlan(){
     (isEric() ? '<h2 class="section-title">Cambio de fase</h2>' + phaseBox +
     '<h2 class="section-title">Fases de la temporada ' + seasonName(season) + '</h2><section class="card"><ul class="phases">' + phases + '</ul></section>' : '') +
     '<h2 class="section-title">Cómo subir peso</h2><section class="card"><ul class="guide">' +
-      '<li>Cuando haga todas las series en el máximo del rango y diga <strong>fácil</strong> o <strong>justo</strong>, el diario propone el siguiente peso.</li>' +
+      '<li>Cuando haga todas las series en el máximo del rango y diga <strong>fácil</strong> o <strong>justo</strong>, el diario propone el siguiente peso. Si dice <strong>fácil</strong> sin haber llegado al máximo, propone sumar ' + (isEric() ? '1 rep' : '2 reps') + ' o, si ya iba por la mitad alta del rango, subir peso.</li>' +
       '<li>Si dice <strong>duro</strong>, se repite el peso hasta que salga justo. Ninguna serie al fallo.</li>' +
       '<li>Dolor en una articulación no es cansancio: ese ejercicio se para ese día.</li></ul></section>' +
     viewGear() +
