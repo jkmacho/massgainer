@@ -397,7 +397,7 @@ label.sub{ font-weight:700; }
    Las 4 fases y las 5 semanas de pruebas se repiten cada temporada con las mismas fechas.
    La primera es la 2026-27; sus pruebas conservan los id de siempre (oct, nov…) */
 /* Versión de la app: tiene que ser igual que VERSION en sw.js */
-const APP_VERSION = 'v16';
+const APP_VERSION = 'v17';
 const SEASON0 = 2026;
 const PHASE_TPL = [
   { n:1, name:'Técnica y base',   start:'10-01', end:'11-22', reps:'2-3 × 10-15 reps' },
@@ -1344,7 +1344,7 @@ function clockText(ms){
 }
 
 /* ---------- Temporizador de descanso ---------- */
-let timerEnd = 0, timerTotal = 90, timerId = null, audioCtx = null, wakeLock = null;
+let timerEnd = 0, timerTotal = 90, timerBase = 90, timerEx = null, timerId = null, audioCtx = null, wakeLock = null;
 const timerLeft = () => Math.max(0, Math.ceil((timerEnd - Date.now()) / 1000));
 /* Si el aviso llega más de 3 s tarde (la app estaba congelada en segundo plano), no suena al volver */
 const LATE = 3000;
@@ -1429,7 +1429,9 @@ function paintRest(){
   document.getElementById('rest-minus').hidden = !!chain;
   document.getElementById('chain-stop').hidden = !chain;
   document.getElementById('rest-count').textContent = done ? '¡Siguiente serie!' : clockText(left * 1000);
-  document.getElementById('rest-lab').textContent = done ? 'Descanso terminado' : chain ? 'Descanso · luego serie ' + (chain.s + 1) : 'Descanso';
+  const adj = timerTotal !== timerBase;
+  document.getElementById('rest-lab').textContent = done ? 'Descanso terminado' : (chain ? 'Descanso · luego serie ' + (chain.s + 1) : 'Descanso') + ' de ' + clockText(timerTotal * 1000) + (adj ? ' (era ' + clockText(timerBase * 1000) + ')' : '');
+  const fx = document.getElementById('rest-fix'); fx.hidden = done || !adj || !timerEx; fx.textContent = 'Fijar ' + clockText(timerTotal * 1000);
   document.getElementById('rest-fill').style.width = (done ? 100 : Math.min(100, left / timerTotal * 100)) + '%';
 }
 function tick(){
@@ -1449,15 +1451,32 @@ function tick(){
     setTimeout(() => { if (!timerId) { timerEnd = 0; paintRest(); } }, 8000);
   }
 }
-function startRest(sec){
+function startRest(sec, ex){
   cancelWork();
-  timerTotal = sec; timerEnd = Date.now() + sec * 1000;
+  timerTotal = timerBase = sec; timerEx = ex || null; timerEnd = Date.now() + sec * 1000;
   clearInterval(timerId); timerId = setInterval(tick, 250);
   unlockAudio(); keepAwake(true); tick();
 }
 function adjustRest(sec){
   if (!timerId) { startRest(Math.max(15, sec)); return; }
   timerEnd += sec * 1000; timerTotal = Math.max(timerTotal + sec, timerLeft(), 1); tick();
+}
+/* Fija el descanso ajustado como el de este ejercicio para siempre (hoy y en el plan de la sesión) */
+async function fixRest(){
+  const ex = timerEx, sec = Math.round(timerTotal);
+  if (!ex || sec < 15) return;
+  const d = S.drafts[ex.key], it = d && d.items.find(x => x.id === ex.id);
+  if (it) { it.rest = sec; saveDrafts(); }
+  timerBase = sec; paintRest(); render();
+  const t = clone(S.templates), e = (t[ex.session] || []).find(x => x.id === ex.id);
+  if (!e) { toast('Descanso de ' + restLabel(sec) + ' solo hoy (no está en el plan)'); return; }
+  e.rest = sec;
+  try {
+    await store.saveConfig({ templates: t, phasesApplied: S.phasesApplied, prev: S.prevCfg });
+    if (S.edit && !S.edit.dirty) S.edit = null;
+    toast((it ? it.name : e.name) + ': descanso de ' + restLabel(sec) + ' para siempre');
+  } catch (err) { toast('Descanso de ' + restLabel(sec) + ' solo hoy: no se pudo guardar'); }
+  render();
 }
 function stopRest(){ chain = null; clearInterval(timerId); timerId = null; timerEnd = 0; cancelWork(); keepAwake(false); paintRest(); }
 
@@ -1541,7 +1560,7 @@ function stopWork(){
 function viewRest(){
   return '<div id="restbar" class="restbar" hidden role="timer" aria-live="polite"><div id="rest-fill" class="rest-fill"></div><div class="rest-in">' +
     '<div class="rest-txt"><span id="rest-lab" class="lab">Descanso</span><span id="rest-count" class="rest-count"></span></div>' +
-    '<div id="rest-btns" class="rest-btns"><button id="rest-minus" data-act="rest-adj" data-v="-15" aria-label="Quitar 15 segundos">−15</button><button data-act="rest-adj" data-v="15" aria-label="Añadir 15 segundos">+15</button><button data-act="rest-skip">Saltar</button><button id="chain-stop" data-act="chain-stop" hidden aria-label="Terminar el ejercicio, sin más series seguidas">Fin</button></div><div id="work-btns" class="rest-btns" hidden><button data-act="work-stop">Parar</button><button data-act="work-cancel">Cancelar</button></div>' +
+    '<div id="rest-btns" class="rest-btns"><button id="rest-minus" data-act="rest-adj" data-v="-15" aria-label="Quitar 15 segundos">−15</button><button data-act="rest-adj" data-v="15" aria-label="Añadir 15 segundos">+15</button><button id="rest-fix" data-act="rest-fix" hidden>Fijar</button><button data-act="rest-skip">Saltar</button><button id="chain-stop" data-act="chain-stop" hidden aria-label="Terminar el ejercicio, sin más series seguidas">Fin</button></div><div id="work-btns" class="rest-btns" hidden><button data-act="work-stop">Parar</button><button data-act="work-cancel">Cancelar</button></div>' +
   '</div></div>';
 }
 
@@ -2067,7 +2086,7 @@ function viewPlan(){
         '<label>Mínimo<input type="text" inputmode="numeric" data-key="emi-' + kp + '" data-act="e-min" data-i="' + i + '" value="' + esc(e.min) + '"></label>' +
         '<label>Máximo<input type="text" inputmode="numeric" data-key="ema-' + kp + '" data-act="e-max" data-i="' + i + '" value="' + esc(e.max) + '"></label>' +
         ownFields +
-        '<label>Descanso<select data-act="e-rest" data-i="' + i + '"><option value="">El general</option>' + RESTS.map(r => '<option value="' + r + '"' + (Number(e.rest) === r ? ' selected' : '') + '>' + restLabel(r) + '</option>').join('') + '</select></label>' +
+        '<label>Descanso<select data-act="e-rest" data-i="' + i + '"><option value="">El general</option>' + (Number(e.rest) > 0 && RESTS.indexOf(Number(e.rest)) < 0 ? RESTS.concat(Number(e.rest)).sort((a, b) => a - b) : RESTS).map(r => '<option value="' + r + '"' + (Number(e.rest) === r ? ' selected' : '') + '>' + restLabel(r) + '</option>').join('') + '</select></label>' +
         (i < list.length - 1 ? '<label>Superserie<select data-act="e-ss" data-i="' + i + '"><option value="">No</option><option value="1"' + (e.ss ? ' selected' : '') + '>Con el siguiente</option></select></label>' : '') +
         '<label>Salto de peso (kg)<input type="text" inputmode="decimal" data-key="est-' + kp + '" data-act="e-step" data-i="' + i + '" value="' + esc(e.step == null ? '' : fmtNum(e.step)) + '"></label>' +
       '</div>' +
@@ -2276,7 +2295,7 @@ async function saveTemplatesAction(){
       const st = num(e.step);
       const out = { id: e.id, name: String(e.name).trim(), kind: e.kind === 'time' ? 'time' : 'reps', sets: clampInt(e.sets, 1, 8, 3), min, max,
         weight: e.weight == null ? null : e.weight, step: st == null ? 0 : Math.max(0, st), note: String(e.note || '').trim() };
-      if (RESTS.indexOf(Number(e.rest)) >= 0) out.rest = Number(e.rest);
+      if (Number(e.rest) >= 15 && Number(e.rest) <= 900) out.rest = Math.round(Number(e.rest));
       if (Array.isArray(e.m) && e.m.length) out.m = e.m.slice();
       if (e.eq) out.eq = e.eq;
       if (e.ss) out.ss = true;
@@ -2470,7 +2489,7 @@ function markDone(i, s){
   const pr = draftProgress(d);
   const nx = d.items[Number(i) + 1];
   if (it.ss && nx && !nx.skip && s < nx.reps.length && !nx.done[s]) { stopRest(); toast('Superserie: ahora ' + nx.name + ', serie ' + (s + 1)); }
-  else if (pr.done < pr.total) startRest(it.rest || S.restSec); else stopRest();
+  else if (pr.done < pr.total) startRest(it.rest || S.restSec, { key:S.active, id:it.id, session:d.session }); else stopRest();
   render();
 }
 
@@ -2537,6 +2556,7 @@ function onClick(act, ds){
     case 'effort': { const it = curItem(ds.i); it.effort = it.effort === ds.v ? null : ds.v; saveDrafts(); render(); break; }
     case 'skip': { const it = curItem(ds.i); it.skip = !it.skip; saveDrafts(); render(); break; }
     case 'preset': S.restSec = Number(ds.v); LS.set('restSec', S.restSec); render(); break;
+    case 'rest-fix': fixRest(); break;
     case 'rest-adj': adjustRest(Number(ds.v)); break;
     case 'rest-skip': { const c = chain; stopRest(); if (c) runChain(c, 0); break; }
     case 'chain-stop': stopRest(); break;
